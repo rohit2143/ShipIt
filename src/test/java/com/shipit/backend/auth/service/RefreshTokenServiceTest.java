@@ -122,4 +122,28 @@ class RefreshTokenServiceTest {
 
         verify(refreshTokenRepository).revokeAllByFamilyId(eq(familyId), any(Instant.class));
     }
+
+    @Test
+    @DisplayName("Should throw UnauthorizedException and not issue new token when refresh token is expired")
+    void shouldRejectExpiredRefreshToken() {
+        UUID familyId = UUID.randomUUID();
+        String rawToken = "expired-raw-token";
+        String tokenHash = HashUtil.sha256(rawToken);
+
+        RefreshToken expiredToken = RefreshToken.builder()
+                .id(UUID.randomUUID())
+                .user(sampleUser)
+                .tokenHash(tokenHash)
+                .familyId(familyId)
+                .expiresAt(Instant.now().minusSeconds(3600))
+                .build();
+
+        when(refreshTokenRepository.findByTokenHash(tokenHash)).thenReturn(Optional.of(expiredToken));
+
+        assertThatThrownBy(() -> refreshTokenService.rotateRefreshToken(rawToken, "Chrome/120", "127.0.0.1"))
+                .isInstanceOf(UnauthorizedException.class)
+                .hasMessageContaining("Refresh token has expired");
+
+        verify(refreshTokenRepository, never()).save(any(RefreshToken.class));
+    }
 }

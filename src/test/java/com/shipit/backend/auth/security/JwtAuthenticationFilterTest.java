@@ -87,4 +87,66 @@ class JwtAuthenticationFilterTest {
         verify(filterChain).doFilter(request, response);
         verifyNoInteractions(jwtService, userDetailsService);
     }
+
+    @Test
+    @DisplayName("Should pass request without authentication when non-Bearer scheme is used")
+    void shouldIgnoreNonBearerAuthorizationHeader() throws ServletException, IOException {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("Authorization", "Basic dXNlcjpwYXNz");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        jwtAuthenticationFilter.doFilterInternal(request, response, filterChain);
+
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        verify(filterChain).doFilter(request, response);
+        verifyNoInteractions(jwtService, userDetailsService);
+    }
+
+    @Test
+    @DisplayName("Should pass request without authentication when Bearer token is empty or whitespace")
+    void shouldIgnoreEmptyBearerToken() throws ServletException, IOException {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("Authorization", "Bearer    ");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        jwtAuthenticationFilter.doFilterInternal(request, response, filterChain);
+
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        verify(filterChain).doFilter(request, response);
+        verifyNoInteractions(jwtService, userDetailsService);
+    }
+
+    @Test
+    @DisplayName("Should not authenticate and leave SecurityContext empty when JWT is invalid")
+    void shouldNotAuthenticateWhenTokenIsInvalid() throws ServletException, IOException {
+        String invalidJwt = "invalid.token.here";
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("Authorization", "Bearer " + invalidJwt);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        when(jwtService.isTokenValid(invalidJwt)).thenReturn(false);
+
+        jwtAuthenticationFilter.doFilterInternal(request, response, filterChain);
+
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        verify(filterChain).doFilter(request, response);
+        verifyNoInteractions(userDetailsService);
+    }
+
+    @Test
+    @DisplayName("Should not authenticate and leave SecurityContext empty when JWT is expired")
+    void shouldNotAuthenticateWhenTokenIsExpired() throws ServletException, IOException {
+        String expiredJwt = "expired.token.here";
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("Authorization", "Bearer " + expiredJwt);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        when(jwtService.isTokenValid(expiredJwt)).thenReturn(false);
+
+        jwtAuthenticationFilter.doFilterInternal(request, response, filterChain);
+
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        verify(filterChain).doFilter(request, response);
+        verifyNoInteractions(userDetailsService);
+    }
 }

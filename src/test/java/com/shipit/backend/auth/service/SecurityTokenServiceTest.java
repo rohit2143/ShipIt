@@ -185,4 +185,55 @@ class SecurityTokenServiceTest {
         // Verify all active refresh tokens for user are revoked
         verify(refreshTokenService).revokeAllUserTokens(sampleUser.getId());
     }
+
+    @Test
+    @DisplayName("Should reject email verification with already used token")
+    void shouldRejectAlreadyUsedVerificationToken() {
+        String rawToken = "already-used-token-123";
+        String tokenHash = HashUtil.sha256(rawToken);
+
+        SecurityToken token = SecurityToken.builder()
+                .id(UUID.randomUUID())
+                .user(sampleUser)
+                .tokenType(SecurityTokenType.EMAIL_VERIFICATION)
+                .tokenHash(tokenHash)
+                .expiresAt(Instant.now().plusSeconds(3600))
+                .usedAt(Instant.now().minusSeconds(100))
+                .build();
+
+        when(securityTokenRepository.findByTokenHashAndTokenType(tokenHash, SecurityTokenType.EMAIL_VERIFICATION))
+                .thenReturn(Optional.of(token));
+
+        assertThatThrownBy(() -> securityTokenService.verifyEmail(rawToken))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("already been used")
+                .matches(ex -> "TOKEN_ALREADY_USED".equals(((BadRequestException) ex).getErrorCode()));
+    }
+
+    @Test
+    @DisplayName("Should reject password reset with already used token")
+    void shouldRejectAlreadyUsedPasswordResetToken() {
+        String rawToken = "already-used-reset-123";
+        String tokenHash = HashUtil.sha256(rawToken);
+
+        SecurityToken token = SecurityToken.builder()
+                .id(UUID.randomUUID())
+                .user(sampleUser)
+                .tokenType(SecurityTokenType.PASSWORD_RESET)
+                .tokenHash(tokenHash)
+                .expiresAt(Instant.now().plusSeconds(1800))
+                .usedAt(Instant.now().minusSeconds(100))
+                .build();
+
+        when(securityTokenRepository.findByTokenHashAndTokenType(tokenHash, SecurityTokenType.PASSWORD_RESET))
+                .thenReturn(Optional.of(token));
+
+        assertThatThrownBy(() -> securityTokenService.resetPassword(rawToken, "NewPass123!"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("already been used")
+                .matches(ex -> "TOKEN_ALREADY_USED".equals(((BadRequestException) ex).getErrorCode()));
+
+        verify(identityRepository, never()).save(any());
+        verify(refreshTokenService, never()).revokeAllUserTokens(any());
+    }
 }
