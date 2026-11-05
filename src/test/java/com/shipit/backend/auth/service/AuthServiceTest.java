@@ -8,6 +8,7 @@ import com.shipit.backend.auth.entity.RefreshToken;
 import com.shipit.backend.auth.entity.UserAuthIdentity;
 import com.shipit.backend.auth.repository.UserAuthIdentityRepository;
 import com.shipit.backend.common.exception.ConflictException;
+import com.shipit.backend.common.exception.ForbiddenException;
 import com.shipit.backend.common.exception.UnauthorizedException;
 import com.shipit.backend.config.JwtProperties;
 import com.shipit.backend.user.entity.Role;
@@ -171,5 +172,57 @@ class AuthServiceTest {
         assertThatThrownBy(() -> authService.login(request, "Agent/1.0", "127.0.0.1"))
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessageContaining("Invalid email or password");
+    }
+
+    @Test
+    @DisplayName("Should reject non-existent email on login with generic UnauthorizedException")
+    void shouldRejectNonExistentEmailOnLogin() {
+        LoginRequest request = LoginRequest.builder()
+                .email("nonexistent@shipit.dev")
+                .password("Password123!")
+                .build();
+
+        when(identityRepository.findByProviderAndProviderUserId(AuthProvider.LOCAL, "nonexistent@shipit.dev"))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.login(request, "Agent/1.0", "127.0.0.1"))
+                .isInstanceOf(UnauthorizedException.class)
+                .hasMessageContaining("Invalid email or password");
+
+        verifyNoInteractions(passwordEncoder, jwtService, refreshTokenService);
+    }
+
+    @Test
+    @DisplayName("Should reject suspended user on login with ForbiddenException")
+    void shouldRejectSuspendedUserOnLogin() {
+        User suspendedUser = User.builder()
+                .id(UUID.randomUUID())
+                .name("Suspended User")
+                .email("suspended@shipit.dev")
+                .role(Role.ROLE_USER)
+                .status(UserStatus.SUSPENDED)
+                .build();
+
+        LoginRequest request = LoginRequest.builder()
+                .email("suspended@shipit.dev")
+                .password("Password123!")
+                .build();
+
+        UserAuthIdentity identity = UserAuthIdentity.builder()
+                .user(suspendedUser)
+                .provider(AuthProvider.LOCAL)
+                .providerUserId("suspended@shipit.dev")
+                .passwordHash("encoded_pass")
+                .build();
+
+        when(identityRepository.findByProviderAndProviderUserId(AuthProvider.LOCAL, "suspended@shipit.dev"))
+                .thenReturn(Optional.of(identity));
+        when(passwordEncoder.matches("Password123!", "encoded_pass")).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.login(request, "Agent/1.0", "127.0.0.1"))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessageContaining("Account has been suspended");
+
+        verifyNoInteractions(jwtService, refreshTokenService);
     }
 }
