@@ -35,6 +35,8 @@ build/
 .env
 .env.*
 !.env.example
+*.pem
+secrets/
 
 # IDE and OS files
 .DS_Store
