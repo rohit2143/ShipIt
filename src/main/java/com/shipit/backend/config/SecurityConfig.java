@@ -55,6 +55,7 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/actuator/**",
                                 "/api/v1/auth/**",
+                                "/api/v1/github/webhooks",
                                 "/api/test/**"
                         ).permitAll()
                         .anyRequest().authenticated()
