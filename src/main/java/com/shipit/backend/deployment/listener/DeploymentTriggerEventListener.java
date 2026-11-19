@@ -4,6 +4,7 @@ import com.shipit.backend.deployment.entity.Deployment;
 import com.shipit.backend.deployment.entity.DeploymentStatus;
 import com.shipit.backend.deployment.entity.DeploymentTrigger;
 import com.shipit.backend.deployment.repository.DeploymentRepository;
+import com.shipit.backend.job.service.DeploymentJobService;
 import com.shipit.backend.project.entity.Project;
 import com.shipit.backend.project.entity.ProjectStatus;
 import com.shipit.backend.project.event.ProjectDeploymentTriggerEvent;
@@ -24,6 +25,7 @@ public class DeploymentTriggerEventListener {
 
     private final DeploymentRepository deploymentRepository;
     private final ProjectRepository projectRepository;
+    private final DeploymentJobService deploymentJobService;
 
     @EventListener
     @Transactional
@@ -85,7 +87,8 @@ public class DeploymentTriggerEventListener {
                 .build();
 
         Deployment saved = deploymentRepository.save(deployment);
-        log.info("Successfully queued auto-deployment id: {} for project '{}' (id: {}) via webhook push event",
+        deploymentJobService.createJob(saved, 0);
+        log.info("Successfully queued auto-deployment id: {} and background job for project '{}' (id: {}) via webhook push event",
                 saved.getId(), project.getName(), project.getId());
     }
 }

@@ -4,6 +4,7 @@ import com.shipit.backend.deployment.entity.Deployment;
 import com.shipit.backend.deployment.entity.DeploymentStatus;
 import com.shipit.backend.deployment.entity.DeploymentTrigger;
 import com.shipit.backend.deployment.repository.DeploymentRepository;
+import com.shipit.backend.job.service.DeploymentJobService;
 import com.shipit.backend.project.entity.Project;
 import com.shipit.backend.project.entity.ProjectStatus;
 import com.shipit.backend.project.event.ProjectDeploymentTriggerEvent;
@@ -23,6 +24,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -33,6 +35,9 @@ class DeploymentTriggerEventListenerTest {
 
     @Mock
     private ProjectRepository projectRepository;
+
+    @Mock
+    private DeploymentJobService deploymentJobService;
 
     @InjectMocks
     private DeploymentTriggerEventListener listener;
@@ -73,6 +78,7 @@ class DeploymentTriggerEventListenerTest {
 
         verifyNoInteractions(projectRepository);
         verifyNoInteractions(deploymentRepository);
+        verifyNoInteractions(deploymentJobService);
     }
 
     @Test
@@ -87,6 +93,7 @@ class DeploymentTriggerEventListenerTest {
 
         verifyNoInteractions(projectRepository);
         verifyNoInteractions(deploymentRepository);
+        verifyNoInteractions(deploymentJobService);
     }
 
     @Test
@@ -98,6 +105,7 @@ class DeploymentTriggerEventListenerTest {
 
         verify(projectRepository).findById(projectId);
         verifyNoInteractions(deploymentRepository);
+        verifyNoInteractions(deploymentJobService);
     }
 
     @Test
@@ -110,10 +118,11 @@ class DeploymentTriggerEventListenerTest {
 
         verify(projectRepository).findById(projectId);
         verifyNoInteractions(deploymentRepository);
+        verifyNoInteractions(deploymentJobService);
     }
 
     @Test
-    @DisplayName("Should successfully queue deployment on valid event")
+    @DisplayName("Should successfully queue deployment and background job on valid event")
     void onProjectDeploymentTrigger_Success() {
         when(projectRepository.findById(projectId)).thenReturn(Optional.of(sampleProject));
         when(deploymentRepository.save(any(Deployment.class))).thenAnswer(inv -> {
@@ -136,10 +145,12 @@ class DeploymentTriggerEventListenerTest {
         assertThat(saved.getCommitMessage()).isEqualTo("feat: enhance deployment pipeline");
         assertThat(saved.getCommitAuthor()).isEqualTo("Rohit Developer");
         assertThat(saved.getQueuedAt()).isEqualTo(sampleEvent.getTriggeredAt());
+
+        verify(deploymentJobService).createJob(eq(saved), eq(0));
     }
 
     @Test
-    @DisplayName("Should truncate long commit message and fallback author to email or default")
+    @DisplayName("Should truncate long commit message, fallback author, and enqueue job")
     void onProjectDeploymentTrigger_TruncationAndFallback() {
         String longMessage = "Commit Message: ".repeat(100); // > 1000 chars
         ProjectDeploymentTriggerEvent event = ProjectDeploymentTriggerEvent.builder()
@@ -166,5 +177,7 @@ class DeploymentTriggerEventListenerTest {
         assertThat(saved.getCommitSha()).hasSize(40);
         assertThat(saved.getCommitAuthor()).isEqualTo("onlyemail@shipit.dev");
         assertThat(saved.getQueuedAt()).isNotNull();
+
+        verify(deploymentJobService).createJob(eq(saved), eq(0));
     }
 }

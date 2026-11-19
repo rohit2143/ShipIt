@@ -10,6 +10,7 @@ import com.shipit.backend.deployment.entity.Deployment;
 import com.shipit.backend.deployment.entity.DeploymentStatus;
 import com.shipit.backend.deployment.entity.DeploymentTrigger;
 import com.shipit.backend.deployment.repository.DeploymentRepository;
+import com.shipit.backend.job.service.DeploymentJobService;
 import com.shipit.backend.project.entity.Project;
 import com.shipit.backend.project.entity.ProjectStatus;
 import com.shipit.backend.project.repository.ProjectRepository;
@@ -33,6 +34,7 @@ public class DeploymentService {
     private final DeploymentRepository deploymentRepository;
     private final ProjectRepository projectRepository;
     private final UserService userService;
+    private final DeploymentJobService deploymentJobService;
 
     @Transactional
     public DeploymentResponse triggerManualDeployment(UUID userId, UUID projectId, TriggerDeploymentRequest request) {
@@ -66,7 +68,8 @@ public class DeploymentService {
                 .build();
 
         Deployment saved = deploymentRepository.save(deployment);
-        log.info("Successfully queued manual deployment id: {} for project: {}", saved.getId(), projectId);
+        deploymentJobService.createJob(saved, 0);
+        log.info("Successfully queued manual deployment id: {} and background job for project: {}", saved.getId(), projectId);
 
         return DeploymentResponse.fromEntity(saved);
     }
@@ -110,7 +113,15 @@ public class DeploymentService {
 
         deployment.cancel();
         Deployment saved = deploymentRepository.save(deployment);
-        log.info("Successfully cancelled deployment id: {}", saved.getId());
+
+        deploymentJobService.getLatestJobForDeployment(saved.getId())
+                .ifPresent(job -> {
+                    if (!job.getStatus().isTerminal()) {
+                        deploymentJobService.cancelJob(job.getId());
+                    }
+                });
+
+        log.info("Successfully cancelled deployment id: {} and associated background job", saved.getId());
 
         return DeploymentResponse.fromEntity(saved);
     }
@@ -151,7 +162,8 @@ public class DeploymentService {
                 .build();
 
         Deployment saved = deploymentRepository.save(retry);
-        log.info("Successfully queued retry deployment id: {} for original deployment id: {}", saved.getId(), original.getId());
+        deploymentJobService.createJob(saved, 0);
+        log.info("Successfully queued retry deployment id: {} and background job for original deployment id: {}", saved.getId(), original.getId());
 
         return DeploymentResponse.fromEntity(saved);
     }
