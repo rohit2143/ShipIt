@@ -23,6 +23,9 @@ public interface DeploymentRepository extends JpaRepository<Deployment, UUID> {
     @Query("SELECT d FROM Deployment d JOIN d.project p WHERE d.id = :id AND p.user.id = :userId")
     Optional<Deployment> findByIdAndUserId(@Param("id") UUID id, @Param("userId") UUID userId);
 
+    @Query("SELECT d FROM Deployment d JOIN FETCH d.project p LEFT JOIN FETCH p.repository r LEFT JOIN FETCH r.connection c WHERE d.id = :id")
+    Optional<Deployment> findByIdWithDetails(@Param("id") UUID id);
+
     boolean existsByProjectIdAndStatusIn(UUID projectId, Collection<DeploymentStatus> statuses);
 
     Optional<Deployment> findTopByProjectIdOrderByCreatedAtDesc(UUID projectId);
