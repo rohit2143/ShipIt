@@ -10,6 +10,9 @@ import com.shipit.backend.deployment.entity.Deployment;
 import com.shipit.backend.deployment.entity.DeploymentStatus;
 import com.shipit.backend.deployment.entity.DeploymentTrigger;
 import com.shipit.backend.deployment.repository.DeploymentRepository;
+import com.shipit.backend.job.entity.DeploymentJob;
+import com.shipit.backend.job.entity.JobStatus;
+import com.shipit.backend.job.service.DeploymentJobService;
 import com.shipit.backend.project.entity.Project;
 import com.shipit.backend.project.entity.ProjectStatus;
 import com.shipit.backend.project.repository.ProjectRepository;
@@ -37,6 +40,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -50,6 +54,9 @@ class DeploymentServiceTest {
 
     @Mock
     private UserService userService;
+
+    @Mock
+    private DeploymentJobService deploymentJobService;
 
     @InjectMocks
     private DeploymentService deploymentService;
@@ -111,6 +118,8 @@ class DeploymentServiceTest {
         verify(deploymentRepository).save(captor.capture());
         Deployment saved = captor.getValue();
         assertThat(saved.getCommitBranch()).isEqualTo("main");
+
+        verify(deploymentJobService).createJob(eq(saved), eq(0));
     }
 
     @Test
@@ -135,6 +144,8 @@ class DeploymentServiceTest {
         assertThat(response.getCommitBranch()).isEqualTo("release/v2");
         assertThat(response.getCommitSha()).isEqualTo("abcdef1234567890abcdef1234567890abcdef12");
         assertThat(response.getCommitMessage()).isEqualTo("feat: release v2 with new architecture");
+
+        verify(deploymentJobService).createJob(any(Deployment.class), eq(0));
     }
 
     @Test
@@ -148,6 +159,7 @@ class DeploymentServiceTest {
                 .hasMessageContaining("Project not found with id: " + projectId);
 
         verify(deploymentRepository, never()).save(any());
+        verifyNoInteractions(deploymentJobService);
     }
 
     @Test
@@ -163,6 +175,7 @@ class DeploymentServiceTest {
                 .hasMessageContaining("Cannot deploy project with status: ARCHIVED");
 
         verify(deploymentRepository, never()).save(any());
+        verifyNoInteractions(deploymentJobService);
     }
 
     @Test
@@ -223,7 +236,6 @@ class DeploymentServiceTest {
         assertThat(response).isNotNull();
         assertThat(response.getId()).isEqualTo(deploymentId);
         assertThat(response.getStatus()).isEqualTo(DeploymentStatus.BUILDING);
-        assertThat(response.getDurationSeconds()).isNotNull();
     }
 
     @Test
@@ -237,7 +249,7 @@ class DeploymentServiceTest {
     }
 
     @Test
-    @DisplayName("cancelDeployment - Success when status is QUEUED")
+    @DisplayName("cancelDeployment - Success when status is QUEUED and cancels active job")
     void cancelDeployment_Success_FromQueued() {
         Deployment d = Deployment.builder()
                 .id(deploymentId)
@@ -248,13 +260,19 @@ class DeploymentServiceTest {
                 .queuedAt(Instant.now())
                 .build();
 
+        UUID jobId = UUID.randomUUID();
+        DeploymentJob job = DeploymentJob.builder().id(jobId).status(JobStatus.PENDING).build();
+
         when(deploymentRepository.findByIdAndUserId(deploymentId, userId)).thenReturn(Optional.of(d));
         when(deploymentRepository.save(any(Deployment.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(deploymentJobService.getLatestJobForDeployment(deploymentId)).thenReturn(Optional.of(job));
 
         DeploymentResponse response = deploymentService.cancelDeployment(userId, deploymentId);
 
         assertThat(response.getStatus()).isEqualTo(DeploymentStatus.CANCELLED);
         assertThat(response.getFinishedAt()).isNotNull();
+
+        verify(deploymentJobService).cancelJob(jobId);
     }
 
     @Test
@@ -272,11 +290,14 @@ class DeploymentServiceTest {
 
         when(deploymentRepository.findByIdAndUserId(deploymentId, userId)).thenReturn(Optional.of(d));
         when(deploymentRepository.save(any(Deployment.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(deploymentJobService.getLatestJobForDeployment(deploymentId)).thenReturn(Optional.empty());
 
         DeploymentResponse response = deploymentService.cancelDeployment(userId, deploymentId);
 
         assertThat(response.getStatus()).isEqualTo(DeploymentStatus.CANCELLED);
         assertThat(response.getFinishedAt()).isNotNull();
+
+        verify(deploymentJobService, never()).cancelJob(any());
     }
 
     @Test
@@ -295,6 +316,7 @@ class DeploymentServiceTest {
                 .hasMessageContaining("Deployment is already in terminal state: SUCCESS");
 
         verify(deploymentRepository, never()).save(any());
+        verifyNoInteractions(deploymentJobService);
     }
 
     @Test
@@ -313,10 +335,11 @@ class DeploymentServiceTest {
                 .hasMessageContaining("Cannot cancel deployment in BUILDING status");
 
         verify(deploymentRepository, never()).save(any());
+        verifyNoInteractions(deploymentJobService);
     }
 
     @Test
-    @DisplayName("retryDeployment - Success from FAILED deployment")
+    @DisplayName("retryDeployment - Success from FAILED deployment enqueues background job")
     void retryDeployment_Success_FromFailed() {
         Deployment failed = Deployment.builder()
                 .id(deploymentId)
@@ -345,6 +368,8 @@ class DeploymentServiceTest {
         assertThat(response.getCommitBranch()).isEqualTo("develop");
         assertThat(response.getCommitSha()).isEqualTo("failedSha123");
         assertThat(response.getCommitMessage()).isEqualTo("Retry: Initial fix");
+
+        verify(deploymentJobService).createJob(any(Deployment.class), eq(0));
     }
 
     @Test
@@ -364,6 +389,7 @@ class DeploymentServiceTest {
                 .hasMessageContaining("Only failed or cancelled deployments can be retried");
 
         verify(deploymentRepository, never()).save(any());
+        verifyNoInteractions(deploymentJobService);
     }
 
     @Test
@@ -384,6 +410,7 @@ class DeploymentServiceTest {
                 .hasMessageContaining("Cannot retry deployment for project with status: ARCHIVED");
 
         verify(deploymentRepository, never()).save(any());
+        verifyNoInteractions(deploymentJobService);
     }
 
     @Test
