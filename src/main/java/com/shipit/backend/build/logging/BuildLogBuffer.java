@@ -26,14 +26,23 @@ public class BuildLogBuffer {
     private final int maxLineLength;
     private final ArrayDeque<BuildLogEntry> entries;
     private final ReentrantLock lock = new ReentrantLock();
+    private final java.util.function.BiConsumer<LogSource, String> lineListener;
 
     private int droppedLinesCount = 0;
 
     public BuildLogBuffer() {
-        this(DEFAULT_MAX_LOG_LINES, DEFAULT_MAX_LINE_LENGTH);
+        this(DEFAULT_MAX_LOG_LINES, DEFAULT_MAX_LINE_LENGTH, null);
     }
 
     public BuildLogBuffer(int maxLogLines, int maxLineLength) {
+        this(maxLogLines, maxLineLength, null);
+    }
+
+    public BuildLogBuffer(
+            int maxLogLines,
+            int maxLineLength,
+            java.util.function.BiConsumer<LogSource, String> lineListener
+    ) {
         if (maxLogLines <= 0) {
             throw new IllegalArgumentException("maxLogLines must be positive");
         }
@@ -42,6 +51,7 @@ public class BuildLogBuffer {
         }
         this.maxLogLines = maxLogLines;
         this.maxLineLength = maxLineLength;
+        this.lineListener = lineListener;
         this.entries = new ArrayDeque<>(Math.min(maxLogLines, 512));
     }
 
@@ -120,6 +130,14 @@ public class BuildLogBuffer {
                 .source(source)
                 .message(sanitized)
                 .build());
+
+        if (lineListener != null) {
+            try {
+                lineListener.accept(source, sanitized);
+            } catch (Exception ignored) {
+                // Prevent listener errors from interfering with buffer storage
+            }
+        }
     }
 
     /**

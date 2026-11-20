@@ -1760,6 +1760,122 @@
         }
       ],
       "description": "Endpoints for inspecting live container runtime state, graceful stop, restart, and reading container stdout/stderr logs."
+    },
+    {
+      "name": "8. Deployment Logs & Streaming (Module 8)",
+      "item": [
+        {
+          "name": "1. Live SSE Log Stream",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Accept",
+                "value": "text/event-stream"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/deployments/{{deploymentId}}/logs/stream",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "deployments",
+                "{{deploymentId}}",
+                "logs",
+                "stream"
+              ]
+            },
+            "description": "Subscribes to real-time Server-Sent Events (SSE) log stream for the deployment terminal."
+          },
+          "response": []
+        },
+        {
+          "name": "2. Get Historical Logs (Filtered & Paginated)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/deployments/{{deploymentId}}/logs/history?stage=BUILDING&page=0&size=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "deployments",
+                "{{deploymentId}}",
+                "logs",
+                "history"
+              ],
+              "query": [
+                {
+                  "key": "stage",
+                  "value": "BUILDING",
+                  "description": "Optional execution stage filter (CLONING, DETECTING, BUILDING, STARTING, HEALTH_CHECKING, CONTAINER, SYSTEM)"
+                },
+                {
+                  "key": "since",
+                  "value": "0",
+                  "description": "Optional cursor: only return logs strictly after this sequence number"
+                },
+                {
+                  "key": "page",
+                  "value": "0",
+                  "description": "Page index (0-based)"
+                },
+                {
+                  "key": "size",
+                  "value": "50",
+                  "description": "Page size"
+                }
+              ]
+            },
+            "description": "Retrieves paginated, structured historical deployment logs with stage and sequence-based filtering."
+          },
+          "response": []
+        },
+        {
+          "name": "3. Download Plain-Text Logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/deployments/{{deploymentId}}/logs/download",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "deployments",
+                "{{deploymentId}}",
+                "logs",
+                "download"
+              ]
+            },
+            "description": "Downloads the complete formatted execution log file for this deployment."
+          },
+          "response": []
+        }
+      ],
+      "description": "Endpoints for real-time Server-Sent Events log streaming, structured historical log queries, and raw log file downloads."
     }
   ]
 }

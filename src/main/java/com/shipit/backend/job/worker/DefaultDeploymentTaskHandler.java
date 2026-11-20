@@ -22,6 +22,8 @@ import com.shipit.backend.deployment.repository.DeploymentRepository;
 import com.shipit.backend.deployment.service.DeploymentService;
 import com.shipit.backend.job.entity.DeploymentJob;
 import com.shipit.backend.job.service.DeploymentJobService;
+import com.shipit.backend.log.entity.DeploymentStage;
+import com.shipit.backend.log.service.DeploymentLogService;
 import com.shipit.backend.project.entity.Project;
 import com.shipit.backend.project.service.ProjectEnvironmentVariableService;
 import lombok.RequiredArgsConstructor;
@@ -30,9 +32,12 @@ import org.springframework.stereotype.Component;
 
 import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
 @Slf4j
 @Component
@@ -54,6 +59,7 @@ public class DefaultDeploymentTaskHandler implements DeploymentTaskHandler {
     private final ContainerHealthChecker containerHealthChecker;
     private final ProjectEnvironmentVariableService projectEnvironmentVariableService;
     private final ContainerProperties containerProperties;
+    private final DeploymentLogService deploymentLogService;
 
     @Override
     public void handleDeployment(DeploymentJob job) {
@@ -80,9 +86,29 @@ public class DefaultDeploymentTaskHandler implements DeploymentTaskHandler {
 
         Project project = deployment.getProject();
 
+        AtomicReference<DeploymentStage> currentStage = new AtomicReference<>(DeploymentStage.SYSTEM);
+        Map<String, String> projectEnvVars = new HashMap<>();
+        Set<String> sensitiveValues = new HashSet<>();
+        if (project != null && project.getId() != null) {
+            try {
+                projectEnvVars.putAll(projectEnvironmentVariableService
+                        .getDecryptedEnvironmentVariablesForDeployment(project.getId()));
+                sensitiveValues.addAll(projectEnvVars.values());
+            } catch (Exception ex) {
+                log.warn("Failed to pre-fetch sensitive env vars for log redaction: {}", ex.getMessage());
+            }
+        }
+
         BuildLogBuffer logBuffer = new BuildLogBuffer(
                 buildProperties.getMaxLogLines(),
-                buildProperties.getMaxLineLength()
+                buildProperties.getMaxLineLength(),
+                (source, line) -> {
+                    try {
+                        deploymentLogService.appendLog(deploymentId, currentStage.get(), source, line, sensitiveValues);
+                    } catch (Exception e) {
+                        log.warn("Error streaming log line for deployment {}: {}", deploymentId, e.getMessage());
+                    }
+                }
         );
         String commitRef = deployment.getCommitSha() != null ? deployment.getCommitSha() : deployment.getCommitBranch();
         logBuffer.append(LogSource.SYSTEM, String.format("=== Starting build execution for deployment %s (%s) ===",
@@ -95,8 +121,10 @@ public class DefaultDeploymentTaskHandler implements DeploymentTaskHandler {
         try {
             // Step 1: CLONING
             checkCancelled(deploymentId);
+            currentStage.set(DeploymentStage.CLONING);
             deployment = deploymentService.transitionStatus(deploymentId, DeploymentStatus.CLONING, null);
             deployment.setProject(project);
+            deploymentLogService.recordStatusChange(deploymentId, DeploymentStatus.CLONING, "Repository cloning started");
             jobService.recordHeartbeat(job.getId());
             log.debug("Deployment {} entered CLONING", deploymentId);
             logBuffer.append(LogSource.SYSTEM, "Cloning repository branch: " + deployment.getCommitBranch());
@@ -106,8 +134,10 @@ public class DefaultDeploymentTaskHandler implements DeploymentTaskHandler {
 
             // Step 2: DETECTING
             checkCancelled(deploymentId);
+            currentStage.set(DeploymentStage.DETECTING);
             deployment = deploymentService.transitionStatus(deploymentId, DeploymentStatus.DETECTING, null);
             deployment.setProject(project);
+            deploymentLogService.recordStatusChange(deploymentId, DeploymentStatus.DETECTING, "Project detection started");
             jobService.recordHeartbeat(job.getId());
             log.debug("Deployment {} entered DETECTING", deploymentId);
             logBuffer.append(LogSource.SYSTEM, "Detecting project layout and generating build specification...");
@@ -121,8 +151,10 @@ public class DefaultDeploymentTaskHandler implements DeploymentTaskHandler {
 
             // Step 3: BUILDING
             checkCancelled(deploymentId);
+            currentStage.set(DeploymentStage.BUILDING);
             deployment = deploymentService.transitionStatus(deploymentId, DeploymentStatus.BUILDING, null);
             deployment.setProject(project);
+            deploymentLogService.recordStatusChange(deploymentId, DeploymentStatus.BUILDING, "Container image build started");
             jobService.recordHeartbeat(job.getId());
             log.debug("Deployment {} entered BUILDING", deploymentId);
             logBuffer.append(LogSource.SYSTEM, "Executing Docker container build...");
@@ -138,8 +170,10 @@ public class DefaultDeploymentTaskHandler implements DeploymentTaskHandler {
 
             // Step 4: STARTING
             checkCancelled(deploymentId);
+            currentStage.set(DeploymentStage.STARTING);
             deployment = deploymentService.transitionStatus(deploymentId, DeploymentStatus.STARTING, null);
             deployment.setProject(project);
+            deploymentLogService.recordStatusChange(deploymentId, DeploymentStatus.STARTING, "Container startup started");
             jobService.recordHeartbeat(job.getId());
             log.debug("Deployment {} entered STARTING", deploymentId);
             logBuffer.append(LogSource.SYSTEM, "Allocating host port and starting container...");
@@ -147,10 +181,7 @@ public class DefaultDeploymentTaskHandler implements DeploymentTaskHandler {
             allocatedHostPort = portAllocator.allocatePort();
             logBuffer.append(LogSource.SYSTEM, "Allocated host port: " + allocatedHostPort);
 
-            Map<String, String> envVars = new HashMap<>();
-            if (project != null && project.getId() != null) {
-                envVars.putAll(projectEnvironmentVariableService.getDecryptedEnvironmentVariablesForDeployment(project.getId()));
-            }
+            Map<String, String> envVars = new HashMap<>(projectEnvVars);
             int containerPort = (project != null && project.getPort() != null) ? project.getPort() : 8080;
             envVars.put("PORT", String.valueOf(containerPort));
             envVars.put("SHIPIT_DEPLOYMENT_ID", deploymentId.toString());
@@ -188,8 +219,10 @@ public class DefaultDeploymentTaskHandler implements DeploymentTaskHandler {
 
             // Step 5: HEALTH_CHECKING
             checkCancelled(deploymentId);
+            currentStage.set(DeploymentStage.HEALTH_CHECKING);
             deployment = deploymentService.transitionStatus(deploymentId, DeploymentStatus.HEALTH_CHECKING, null);
             deployment.setProject(project);
+            deploymentLogService.recordStatusChange(deploymentId, DeploymentStatus.HEALTH_CHECKING, "Health check verification started");
             jobService.recordHeartbeat(job.getId());
             log.debug("Deployment {} entered HEALTH_CHECKING", deploymentId);
             logBuffer.append(LogSource.SYSTEM, "Running health check verification on port " + allocatedHostPort + "...");
@@ -205,8 +238,10 @@ public class DefaultDeploymentTaskHandler implements DeploymentTaskHandler {
 
             // Step 6: SUCCESS
             checkCancelled(deploymentId);
+            currentStage.set(DeploymentStage.CONTAINER);
             deployment = deploymentService.transitionStatus(deploymentId, DeploymentStatus.SUCCESS, null);
             deployment.setProject(project);
+            deploymentLogService.recordStatusChange(deploymentId, DeploymentStatus.SUCCESS, "Deployment completed successfully");
             logBuffer.append(LogSource.SYSTEM, "Deployment " + deploymentId + " finished successfully.");
             log.info("Deployment {} completed successfully", deploymentId);
 
@@ -217,11 +252,13 @@ public class DefaultDeploymentTaskHandler implements DeploymentTaskHandler {
             log.warn("Deployment {} execution halted: {}", deploymentId, e.getMessage());
             logBuffer.append(LogSource.SYSTEM, "Execution halted: " + e.getMessage());
             rollbackContainerAndPort(deploymentId, containerId, allocatedHostPort);
+            deploymentLogService.recordStatusChange(deploymentId, DeploymentStatus.CANCELLED, e.getMessage());
         } catch (Exception e) {
             log.error("Deployment {} failed during execution: {}", deploymentId, e.getMessage(), e);
             logBuffer.append(LogSource.SYSTEM, "Execution failed: " + e.getMessage());
             rollbackContainerAndPort(deploymentId, containerId, allocatedHostPort);
             deploymentService.transitionStatus(deploymentId, DeploymentStatus.FAILED, e.getMessage());
+            deploymentLogService.recordStatusChange(deploymentId, DeploymentStatus.FAILED, e.getMessage());
             throw e;
         } finally {
             try {

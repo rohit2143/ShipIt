@@ -22,6 +22,7 @@ import com.shipit.backend.deployment.repository.DeploymentRepository;
 import com.shipit.backend.deployment.service.DeploymentService;
 import com.shipit.backend.job.entity.DeploymentJob;
 import com.shipit.backend.job.service.DeploymentJobService;
+import com.shipit.backend.log.service.DeploymentLogService;
 import com.shipit.backend.project.entity.Project;
 import com.shipit.backend.project.service.ProjectEnvironmentVariableService;
 import org.junit.jupiter.api.BeforeEach;
@@ -96,6 +97,9 @@ class DefaultDeploymentTaskHandlerTest {
 
     @Mock
     private ContainerProperties containerProperties;
+
+    @Mock
+    private DeploymentLogService deploymentLogService;
 
     @InjectMocks
     private DefaultDeploymentTaskHandler taskHandler;
@@ -428,5 +432,21 @@ class DefaultDeploymentTaskHandlerTest {
 
         // New deployment succeeded
         verify(deploymentService).transitionStatus(deploymentId, DeploymentStatus.SUCCESS, null);
+    }
+
+    @Test
+    @DisplayName("handleDeployment - Broadcasts status changes to DeploymentLogService across pipeline stages")
+    void handleDeployment_BroadcastsStatusChanges() throws Exception {
+        when(deploymentRepository.findByIdWithDetails(deploymentId)).thenReturn(Optional.of(sampleDeployment));
+        when(deploymentRepository.findById(deploymentId)).thenReturn(Optional.of(sampleDeployment));
+
+        taskHandler.handleDeployment(sampleJob);
+
+        verify(deploymentLogService).recordStatusChange(eq(deploymentId), eq(DeploymentStatus.CLONING), anyString());
+        verify(deploymentLogService).recordStatusChange(eq(deploymentId), eq(DeploymentStatus.DETECTING), anyString());
+        verify(deploymentLogService).recordStatusChange(eq(deploymentId), eq(DeploymentStatus.BUILDING), anyString());
+        verify(deploymentLogService).recordStatusChange(eq(deploymentId), eq(DeploymentStatus.STARTING), anyString());
+        verify(deploymentLogService).recordStatusChange(eq(deploymentId), eq(DeploymentStatus.HEALTH_CHECKING), anyString());
+        verify(deploymentLogService).recordStatusChange(eq(deploymentId), eq(DeploymentStatus.SUCCESS), anyString());
     }
 }
