@@ -172,8 +172,9 @@ public class DeploymentService {
     public Deployment transitionStatus(UUID deploymentId, DeploymentStatus newStatus, String errorMessage) {
         log.debug("Transitioning deployment id: {} to status: {}", deploymentId, newStatus);
 
-        Deployment deployment = deploymentRepository.findById(deploymentId)
-                .orElseThrow(() -> new ResourceNotFoundException("Deployment not found with id: " + deploymentId));
+        Deployment deployment = deploymentRepository.findByIdWithDetails(deploymentId)
+                .orElseGet(() -> deploymentRepository.findById(deploymentId)
+                        .orElseThrow(() -> new ResourceNotFoundException("Deployment not found with id: " + deploymentId)));
 
         if (newStatus == DeploymentStatus.FAILED) {
             deployment.markFailed(errorMessage);

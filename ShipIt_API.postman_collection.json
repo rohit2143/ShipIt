@@ -1,0 +1,1765 @@
+{
+  "info": {
+    "_postman_id": "shipit-api-collection-v1",
+    "name": "ShipIt API (Modules 1-7)",
+    "description": "Comprehensive API collection for ShipIt backend, including Module 1 (Authentication & User Management), Module 2 (GitHub App Integration & Webhooks), Module 3 (Project Management & Encrypted Environment Variables), Module 4 (Deployment Management & Lifecycles), Module 5 (Background Job Engine & Worker Polling), Module 6 (Build Engine & Containerization), and Module 7 (Container Deployment Engine & Lifecycle Controls).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refreshToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "connectionId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "repositoryId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "githubRepoId",
+      "value": "123456",
+      "type": "string"
+    },
+    {
+      "key": "owner",
+      "value": "octocat",
+      "type": "string"
+    },
+    {
+      "key": "repo",
+      "value": "Hello-World",
+      "type": "string"
+    },
+    {
+      "key": "projectId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "envVarKey",
+      "value": "DATABASE_URL",
+      "type": "string"
+    },
+    {
+      "key": "deploymentId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "jobId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Authentication (Module 1)",
+      "item": [
+        {
+          "name": "Register User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200 || pm.response.code === 201) {",
+                  "    var json = pm.response.json();",
+                  "    var tokens = json.data && json.data.tokens ? json.data.tokens : (json.data || {});",
+                  "    if (tokens.accessToken) {",
+                  "        pm.collectionVariables.set('accessToken', tokens.accessToken);",
+                  "        pm.collectionVariables.set('refreshToken', tokens.refreshToken);",
+                  "        console.log('Saved accessToken and refreshToken to collection variables');",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test Developer\",\n  \"email\": \"developer@shipit.dev\",\n  \"password\": \"ShipIt@SecurePass123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Registers a new user account and returns JWT tokens."
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var json = pm.response.json();",
+                  "    var tokens = json.data && json.data.tokens ? json.data.tokens : (json.data || {});",
+                  "    if (tokens.accessToken) {",
+                  "        pm.collectionVariables.set('accessToken', tokens.accessToken);",
+                  "        pm.collectionVariables.set('refreshToken', tokens.refreshToken);",
+                  "        console.log('Saved accessToken and refreshToken to collection variables');",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"developer@shipit.dev\",\n  \"password\": \"ShipIt@SecurePass123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Logs in with email and password, returning short-lived accessToken and rotating refreshToken."
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var json = pm.response.json();",
+                  "    if (json.data && json.data.accessToken) {",
+                  "        pm.collectionVariables.set('accessToken', json.data.accessToken);",
+                  "        pm.collectionVariables.set('refreshToken', json.data.refreshToken);",
+                  "        console.log('Refreshed accessToken and rotated refreshToken');",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "Performs atomic refresh token rotation with reuse detection."
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "Revokes the active refresh token session."
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. User Profile (Module 1)",
+      "item": [
+        {
+          "name": "Get Current User Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "me"
+              ]
+            },
+            "description": "Fetches authenticated user details (id, name, email, role, status)."
+          }
+        },
+        {
+          "name": "Get Linked Identities",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/me/identities",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "me",
+                "identities"
+              ]
+            },
+            "description": "Lists external OAuth identities linked to this user."
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. GitHub Connections (Module 2)",
+      "item": [
+        {
+          "name": "1. Get GitHub App Install URL",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/github/connections/install-url",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "github",
+                "connections",
+                "install-url"
+              ]
+            },
+            "description": "Generates a cryptographically random CSRF state token (stored as SHA-256 in DB) and returns the GitHub App installation URL."
+          }
+        },
+        {
+          "name": "2. GitHub Callback",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var json = pm.response.json();",
+                  "    if (json.data && json.data.id) {",
+                  "        pm.collectionVariables.set('connectionId', json.data.id);",
+                  "        console.log('Saved connectionId:', json.data.id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"installationId\": 12345678,\n  \"setupAction\": \"install\",\n  \"state\": \"paste-raw-state-from-install-url-here\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/github/connections/callback",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "github",
+                "connections",
+                "callback"
+              ]
+            },
+            "description": "Simulates or executes the callback after GitHub App installation. Validates CSRF state atomically and persists connection in PENDING_VERIFICATION status."
+          }
+        },
+        {
+          "name": "3. List Connections",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var json = pm.response.json();",
+                  "    if (json.data && json.data.length > 0) {",
+                  "        pm.collectionVariables.set('connectionId', json.data[0].id);",
+                  "        console.log('Set connectionId from first item:', json.data[0].id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/github/connections",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "github",
+                "connections"
+              ]
+            },
+            "description": "Lists all active/pending GitHub App connections for the authenticated user."
+          }
+        },
+        {
+          "name": "4. Get Connection Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/github/connections/{{connectionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "github",
+                "connections",
+                "{{connectionId}}"
+              ]
+            },
+            "description": "Gets details of a specific GitHub App connection."
+          }
+        },
+        {
+          "name": "5. Verify Connection (Server-to-Server)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/github/connections/{{connectionId}}/verify",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "github",
+                "connections",
+                "{{connectionId}}",
+                "verify"
+              ]
+            },
+            "description": "Triggers server-to-server verification with GitHub using RS256 App JWT. Populates installation metadata (accountLogin, accountType, repoSelection, permissions) and transitions status to CONNECTED."
+          }
+        },
+        {
+          "name": "6. Disconnect Installation",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/github/connections/{{connectionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "github",
+                "connections",
+                "{{connectionId}}"
+              ]
+            },
+            "description": "Locally disconnects the GitHub App installation, setting status to DISCONNECTED and evicting cached tokens."
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. GitHub Repositories & Branches (Module 2)",
+      "item": [
+        {
+          "name": "1. List Accessible Repositories from GitHub",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/github/connections/{{connectionId}}/repositories?page=1&perPage=30",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "github",
+                "connections",
+                "{{connectionId}}",
+                "repositories"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "perPage",
+                  "value": "30"
+                }
+              ]
+            },
+            "description": "Lists repositories accessible to this GitHub App installation directly from the GitHub API using a short-lived token."
+          }
+        },
+        {
+          "name": "2. Preview Branches from GitHub",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/github/connections/{{connectionId}}/repositories/{{owner}}/{{repo}}/branches?page=1&perPage=100",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "github",
+                "connections",
+                "{{connectionId}}",
+                "repositories",
+                "{{owner}}",
+                "{{repo}}",
+                "branches"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "perPage",
+                  "value": "100"
+                }
+              ]
+            },
+            "description": "Previews branches from GitHub for an accessible repository before connecting/importing it."
+          }
+        },
+        {
+          "name": "3. Connect / Import Repository",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201 || pm.response.code === 200) {",
+                  "    var json = pm.response.json();",
+                  "    if (json.data && json.data.id) {",
+                  "        pm.collectionVariables.set('repositoryId', json.data.id);",
+                  "        console.log('Saved repositoryId:', json.data.id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"connectionId\": \"{{connectionId}}\",\n  \"githubRepoId\": {{githubRepoId}}\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/github/repositories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "github",
+                "repositories"
+              ]
+            },
+            "description": "Connects and imports a repository into ShipIt, saving its metadata (fullName, cloneUrl, defaultBranch, isPrivate) in PostgreSQL."
+          }
+        },
+        {
+          "name": "4. List Connected Repositories",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/github/repositories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "github",
+                "repositories"
+              ]
+            },
+            "description": "Lists all repositories tracked and connected by the authenticated user."
+          }
+        },
+        {
+          "name": "5. Get Connected Repository Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/github/repositories/{{repositoryId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "github",
+                "repositories",
+                "{{repositoryId}}"
+              ]
+            },
+            "description": "Retrieves metadata of a specific connected repository."
+          }
+        },
+        {
+          "name": "6. List Branches of Connected Repository",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/github/repositories/{{repositoryId}}/branches?page=1&perPage=100",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "github",
+                "repositories",
+                "{{repositoryId}}",
+                "branches"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "perPage",
+                  "value": "100"
+                }
+              ]
+            },
+            "description": "Lists branches for a connected repository using the active GitHub connection."
+          }
+        },
+        {
+          "name": "7. Disconnect Repository",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/github/repositories/{{repositoryId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "github",
+                "repositories",
+                "{{repositoryId}}"
+              ]
+            },
+            "description": "Unlinks/disconnects the repository from ShipIt."
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. GitHub Webhooks (Module 2)",
+      "item": [
+        {
+          "name": "1. Ping Webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-GitHub-Event",
+                "value": "ping"
+              },
+              {
+                "key": "X-GitHub-Delivery",
+                "value": "{{$guid}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"zen\": \"Design for failure.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/github/webhooks",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "github",
+                "webhooks"
+              ]
+            },
+            "description": "Simulates GitHub sending a ping event when a webhook is first configured."
+          }
+        },
+        {
+          "name": "2. Push Webhook (Connected Repo)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-GitHub-Event",
+                "value": "push"
+              },
+              {
+                "key": "X-GitHub-Delivery",
+                "value": "{{$guid}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ref\": \"refs/heads/main\",\n  \"before\": \"0123456789abcdef0123456789abcdef01234567\",\n  \"after\": \"abcdef0123456789abcdef0123456789abcdef01\",\n  \"deleted\": false,\n  \"repository\": {\n    \"id\": 1441936511,\n    \"name\": \"ShipIt\",\n    \"full_name\": \"rohit2143/ShipIt\",\n    \"private\": false,\n    \"clone_url\": \"https://github.com/rohit2143/ShipIt.git\",\n    \"default_branch\": \"main\"\n  },\n  \"pusher\": {\n    \"name\": \"rohit2143\",\n    \"email\": \"rohit@shipit.dev\"\n  },\n  \"head_commit\": {\n    \"id\": \"abcdef0123456789abcdef0123456789abcdef01\",\n    \"message\": \"feat: add webhook support for auto-deployments\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/github/webhooks",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "github",
+                "webhooks"
+              ]
+            },
+            "description": "Simulates GitHub delivering a push event for connected repository rohit2143/ShipIt."
+          }
+        },
+        {
+          "name": "3. Push Webhook (Branch Deletion - Ignored)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-GitHub-Event",
+                "value": "push"
+              },
+              {
+                "key": "X-GitHub-Delivery",
+                "value": "{{$guid}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ref\": \"refs/heads/feature-branch\",\n  \"deleted\": true,\n  \"after\": \"0000000000000000000000000000000000000000\",\n  \"repository\": {\n    \"id\": 1441936511,\n    \"full_name\": \"rohit2143/ShipIt\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/github/webhooks",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "github",
+                "webhooks"
+              ]
+            },
+            "description": "Simulates GitHub delivering a branch deletion event, which ShipIt safely acknowledges and ignores."
+          }
+        },
+        {
+          "name": "4. Push Webhook (Unconnected Repo - Ignored)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-GitHub-Event",
+                "value": "push"
+              },
+              {
+                "key": "X-GitHub-Delivery",
+                "value": "{{$guid}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ref\": \"refs/heads/main\",\n  \"deleted\": false,\n  \"after\": \"abcdef0123456789abcdef0123456789abcdef01\",\n  \"repository\": {\n    \"id\": 999999999,\n    \"full_name\": \"unconnected/repo\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/github/webhooks",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "github",
+                "webhooks"
+              ]
+            },
+            "description": "Simulates a push to an unconnected repository; ShipIt returns 200 OK and marks delivery as IGNORED."
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Project Management (Module 3)",
+      "item": [
+        {
+          "name": "Projects",
+          "item": [
+            {
+              "name": "1. Create Project (Minimal)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 201 || pm.response.code === 200) {",
+                      "    var json = pm.response.json();",
+                      "    if (json.data && json.data.id) {",
+                      "        pm.collectionVariables.set('projectId', json.data.id);",
+                      "        console.log('Saved projectId:', json.data.id);",
+                      "    }",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"repositoryId\": \"{{repositoryId}}\",\n  \"name\": \"My Web Service\",\n  \"description\": \"Production Web API\",\n  \"deploymentBranch\": \"main\",\n  \"rootDirectory\": \"/\",\n  \"buildCommand\": \"./mvnw clean package -DskipTests\",\n  \"startCommand\": \"java -jar target/app.jar\",\n  \"port\": 8080,\n  \"autoDeploy\": true\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/projects",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "projects"
+                  ]
+                },
+                "description": "Creates a new Project associated with a connected GitHub repository."
+              }
+            },
+            {
+              "name": "2. Create Project (With Initial Encrypted Env Vars)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 201 || pm.response.code === 200) {",
+                      "    var json = pm.response.json();",
+                      "    if (json.data && json.data.id) {",
+                      "        pm.collectionVariables.set('projectId', json.data.id);",
+                      "        console.log('Saved projectId:', json.data.id);",
+                      "    }",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"repositoryId\": \"{{repositoryId}}\",\n  \"name\": \"Production Backend\",\n  \"description\": \"Production service with encrypted secrets\",\n  \"deploymentBranch\": \"main\",\n  \"port\": 8081,\n  \"autoDeploy\": true,\n  \"environmentVariables\": [\n    {\n      \"key\": \"PORT\",\n      \"value\": \"8081\",\n      \"isSecret\": false\n    },\n    {\n      \"key\": \"DATABASE_PASSWORD\",\n      \"value\": \"superSecretPassword123!\",\n      \"isSecret\": true\n    }\n  ]\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/projects",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "projects"
+                  ]
+                },
+                "description": "Creates a Project with initial environment variables, encrypting secrets at rest with AES-256-GCM + AAD."
+              }
+            },
+            {
+              "name": "3. List User Projects",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/projects",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "projects"
+                  ]
+                },
+                "description": "Lists all projects owned by the authenticated user with repository summary metadata."
+              }
+            },
+            {
+              "name": "4. Get Project by ID",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/projects/{{projectId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "projects",
+                    "{{projectId}}"
+                  ]
+                },
+                "description": "Retrieves full configuration details and environment variable count for a specific project."
+              }
+            },
+            {
+              "name": "5. Update Project Configuration",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Updated Web Service\",\n  \"description\": \"Updated description\",\n  \"deploymentBranch\": \"main\",\n  \"rootDirectory\": \"/app\",\n  \"buildCommand\": \"./mvnw clean package\",\n  \"startCommand\": \"java -jar target/app.jar\",\n  \"port\": 9090,\n  \"autoDeploy\": true\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/projects/{{projectId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "projects",
+                    "{{projectId}}"
+                  ]
+                },
+                "description": "Updates project build/start configuration, port, or branch."
+              }
+            },
+            {
+              "name": "6. Delete Project",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/projects/{{projectId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "projects",
+                    "{{projectId}}"
+                  ]
+                },
+                "description": "Deletes project and cascades deletion to all associated environment variables."
+              }
+            }
+          ]
+        },
+        {
+          "name": "Environment Variables",
+          "item": [
+            {
+              "name": "1. List Environment Variables (Masked)",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/projects/{{projectId}}/env",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "projects",
+                    "{{projectId}}",
+                    "env"
+                  ]
+                },
+                "description": "Lists all environment variables for a project. Secret variables are masked as '********'."
+              }
+            },
+            {
+              "name": "2. Get Environment Variable by Key",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/projects/{{projectId}}/env/{{envVarKey}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "projects",
+                    "{{projectId}}",
+                    "env",
+                    "{{envVarKey}}"
+                  ]
+                },
+                "description": "Retrieves a single environment variable by key (masked if secret)."
+              }
+            },
+            {
+              "name": "3. Upsert Single Environment Variable",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 200) {",
+                      "    var json = pm.response.json();",
+                      "    if (json.data && json.data.key) {",
+                      "        pm.collectionVariables.set('envVarKey', json.data.key);",
+                      "        console.log('Saved envVarKey:', json.data.key);",
+                      "    }",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"key\": \"JWT_SECRET\",\n  \"value\": \"super-secure-production-jwt-token-key-256bit\",\n  \"isSecret\": true\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/projects/{{projectId}}/env",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "projects",
+                    "{{projectId}}",
+                    "env"
+                  ]
+                },
+                "description": "Upserts an environment variable. If isSecret=true, encrypts with AES-256-GCM bound to (projectId, key) via AAD."
+              }
+            },
+            {
+              "name": "4. Batch Upsert Environment Variables",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"variables\": [\n    {\n      \"key\": \"SPRING_PROFILES_ACTIVE\",\n      \"value\": \"prod\",\n      \"isSecret\": false\n    },\n    {\n      \"key\": \"DATABASE_URL\",\n      \"value\": \"jdbc:postgresql://postgres.internal:5432/shipit_prod\",\n      \"isSecret\": false\n    },\n    {\n      \"key\": \"DATABASE_PASSWORD\",\n      \"value\": \"vaultSecretPostgresPassword!\",\n      \"isSecret\": true\n    }\n  ]\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/projects/{{projectId}}/env/batch",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "projects",
+                    "{{projectId}}",
+                    "env",
+                    "batch"
+                  ]
+                },
+                "description": "Atomically batch upserts multiple environment variables with duplicate key validation and secret encryption."
+              }
+            },
+            {
+              "name": "5. Delete Environment Variable",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/projects/{{projectId}}/env/{{envVarKey}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "projects",
+                    "{{projectId}}",
+                    "env",
+                    "{{envVarKey}}"
+                  ]
+                },
+                "description": "Deletes an environment variable by key."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Deployments (Module 4)",
+      "item": [
+        {
+          "name": "1. Trigger Manual Deployment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201 || pm.response.code === 200) {",
+                  "    var json = pm.response.json();",
+                  "    if (json.data && json.data.id) {",
+                  "        pm.collectionVariables.set('deploymentId', json.data.id);",
+                  "        console.log('Saved deploymentId:', json.data.id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"branch\": \"main\",\n  \"commitSha\": \"abc123def4567890abcdef1234567890abcdef12\",\n  \"commitMessage\": \"Manual deployment via ShipIt API\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/projects/{{projectId}}/deployments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "projects",
+                "{{projectId}}",
+                "deployments"
+              ]
+            },
+            "description": "Triggers a manual deployment for an active project. Optional branch, commitSha, and commitMessage."
+          }
+        },
+        {
+          "name": "2. List Project Deployments (Paginated)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/projects/{{projectId}}/deployments?page=0&size=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "projects",
+                "{{projectId}}",
+                "deployments"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Lists paginated deployment history for a project, sorted by createdAt DESC."
+          }
+        },
+        {
+          "name": "3. Get Deployment Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/deployments/{{deploymentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "deployments",
+                "{{deploymentId}}"
+              ]
+            },
+            "description": "Retrieves full configuration, status, timestamps, and duration for a specific deployment."
+          }
+        },
+        {
+          "name": "4. Cancel Deployment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/deployments/{{deploymentId}}/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "deployments",
+                "{{deploymentId}}",
+                "cancel"
+              ]
+            },
+            "description": "Safely cancels a queued or cloning deployment. Rejects cancellation of terminal or active builds."
+          }
+        },
+        {
+          "name": "5. Retry Deployment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201 || pm.response.code === 200) {",
+                  "    var json = pm.response.json();",
+                  "    if (json.data && json.data.id) {",
+                  "        pm.collectionVariables.set('deploymentId', json.data.id);",
+                  "        console.log('Saved retried deploymentId:', json.data.id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/deployments/{{deploymentId}}/retry",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "deployments",
+                "{{deploymentId}}",
+                "retry"
+              ]
+            },
+            "description": "Retries a failed or cancelled deployment by creating a new QUEUED deployment with trigger=RETRY."
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Background Jobs (Module 5)",
+      "item": [
+        {
+          "name": "1. Get Latest Job for Deployment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var json = pm.response.json();",
+                  "    if (json.data && json.data.id) {",
+                  "        pm.collectionVariables.set('jobId', json.data.id);",
+                  "        console.log('Saved jobId:', json.data.id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/deployments/{{deploymentId}}/job",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "deployments",
+                "{{deploymentId}}",
+                "job"
+              ]
+            },
+            "description": "Retrieves the latest background execution job for the specified deployment. Automatically saves the job ID to the collection variable {{jobId}}."
+          },
+          "response": []
+        },
+        {
+          "name": "2. Get Job Details by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/jobs/{{jobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "jobs",
+                "{{jobId}}"
+              ]
+            },
+            "description": "Retrieves detailed execution metrics, status, worker node, priority, retry counters, and duration for a specific job."
+          },
+          "response": []
+        },
+        {
+          "name": "3. List All Jobs for Deployment",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/deployments/{{deploymentId}}/jobs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "deployments",
+                "{{deploymentId}}",
+                "jobs"
+              ]
+            },
+            "description": "Lists all background execution jobs associated with the deployment, ordered newest first."
+          },
+          "response": []
+        },
+        {
+          "name": "4. Get Job Queue Statistics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/jobs/stats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "jobs",
+                "stats"
+              ]
+            },
+            "description": "Retrieves real-time counts of background jobs across all statuses (PENDING, RUNNING, COMPLETED, FAILED, CANCELLED) and total jobs queued."
+          },
+          "response": []
+        }
+      ],
+      "description": "Endpoints for inspecting database-backed asynchronous background jobs, monitoring execution states, and tracking queue statistics."
+    },
+    {
+      "name": "6. Build Engine (Module 6)",
+      "item": [
+        {
+          "name": "1. Get Deployment Build Logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/deployments/{{deploymentId}}/logs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "deployments",
+                "{{deploymentId}}",
+                "logs"
+              ]
+            },
+            "description": "Retrieves real-time or historical build stdout/stderr execution logs for the specified deployment."
+          },
+          "response": []
+        }
+      ],
+      "description": "Endpoints for retrieving Docker build logs, compiler output, and project packaging diagnostics."
+    },
+    {
+      "name": "7. Container Deployment Engine (Module 7)",
+      "item": [
+        {
+          "name": "1. Inspect Container Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/deployments/{{deploymentId}}/container",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "deployments",
+                "{{deploymentId}}",
+                "container"
+              ]
+            },
+            "description": "Inspects the live state, health probe, host port mapping, and metadata of the Docker container running for this deployment."
+          },
+          "response": []
+        },
+        {
+          "name": "2. Restart Container",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/deployments/{{deploymentId}}/container/restart",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "deployments",
+                "{{deploymentId}}",
+                "container",
+                "restart"
+              ]
+            },
+            "description": "Restarts the running Docker container for the specified deployment."
+          },
+          "response": []
+        },
+        {
+          "name": "3. Stop Container",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/deployments/{{deploymentId}}/container/stop",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "deployments",
+                "{{deploymentId}}",
+                "container",
+                "stop"
+              ]
+            },
+            "description": "Stops the active Docker container for the specified deployment gracefully."
+          },
+          "response": []
+        },
+        {
+          "name": "4. Get Container Logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/deployments/{{deploymentId}}/container/logs?lines=100",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "deployments",
+                "{{deploymentId}}",
+                "container",
+                "logs"
+              ],
+              "query": [
+                {
+                  "key": "lines",
+                  "value": "100",
+                  "description": "Number of tail log lines to retrieve (default: 100, max: 2000)"
+                }
+              ]
+            },
+            "description": "Fetches live stdout/stderr logs from the active Docker container running for this deployment."
+          },
+          "response": []
+        }
+      ],
+      "description": "Endpoints for inspecting live container runtime state, graceful stop, restart, and reading container stdout/stderr logs."
+    }
+  ]
+}

@@ -10,6 +10,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -33,6 +34,8 @@ public interface DeploymentRepository extends JpaRepository<Deployment, UUID> {
     Optional<Deployment> findTopByProjectIdAndStatusInOrderByCreatedAtDesc(
             UUID projectId, Collection<DeploymentStatus> statuses
     );
+
+    List<Deployment> findByProjectIdAndContainerIdIsNotNullAndIdNot(UUID projectId, UUID id);
 
     long countByProjectId(UUID projectId);
 }

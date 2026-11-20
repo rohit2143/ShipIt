@@ -277,6 +277,10 @@ class DeploymentJobRepositoryTest {
     @Test
     @DisplayName("countByStatus and findAllByStatus return accurate counts and lists")
     void testCountAndFindAllByStatus() {
+        jobRepository.deleteAll();
+        entityManager.flush();
+        entityManager.clear();
+
         DeploymentJob pending1 = DeploymentJob.builder()
                 .deployment(sampleDeployment)
                 .type(JobType.DEPLOYMENT)

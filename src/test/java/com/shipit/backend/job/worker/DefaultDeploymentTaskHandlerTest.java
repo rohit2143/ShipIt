@@ -10,6 +10,12 @@ import com.shipit.backend.build.service.BuildLogService;
 import com.shipit.backend.build.service.DockerBuildService;
 import com.shipit.backend.build.service.GitCloneService;
 import com.shipit.backend.build.workspace.WorkspaceManager;
+import com.shipit.backend.container.config.ContainerProperties;
+import com.shipit.backend.container.exception.ContainerException;
+import com.shipit.backend.container.health.ContainerHealthChecker;
+import com.shipit.backend.container.model.ContainerConfig;
+import com.shipit.backend.container.port.PortAllocator;
+import com.shipit.backend.container.service.DockerContainerService;
 import com.shipit.backend.deployment.entity.Deployment;
 import com.shipit.backend.deployment.entity.DeploymentStatus;
 import com.shipit.backend.deployment.repository.DeploymentRepository;
@@ -17,10 +23,12 @@ import com.shipit.backend.deployment.service.DeploymentService;
 import com.shipit.backend.job.entity.DeploymentJob;
 import com.shipit.backend.job.service.DeploymentJobService;
 import com.shipit.backend.project.entity.Project;
+import com.shipit.backend.project.service.ProjectEnvironmentVariableService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -28,12 +36,15 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
 import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -71,6 +82,21 @@ class DefaultDeploymentTaskHandlerTest {
     @Mock
     private BuildProperties buildProperties;
 
+    @Mock
+    private DockerContainerService dockerContainerService;
+
+    @Mock
+    private PortAllocator portAllocator;
+
+    @Mock
+    private ContainerHealthChecker containerHealthChecker;
+
+    @Mock
+    private ProjectEnvironmentVariableService projectEnvironmentVariableService;
+
+    @Mock
+    private ContainerProperties containerProperties;
+
     @InjectMocks
     private DefaultDeploymentTaskHandler taskHandler;
 
@@ -92,6 +118,7 @@ class DefaultDeploymentTaskHandlerTest {
                 .id(UUID.randomUUID())
                 .name("sample-app")
                 .normalizedName("sample-app")
+                .port(8080)
                 .build();
 
         sampleDeployment = Deployment.builder()
@@ -137,10 +164,24 @@ class DefaultDeploymentTaskHandlerTest {
         when(dockerBuildService.buildImage(any(), any(), any())).thenReturn(sampleBuildResult);
         when(deploymentService.transitionStatus(any(), any(), any())).thenReturn(sampleDeployment);
         when(deploymentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        // Container Mocks default configuration
+        when(portAllocator.allocatePort()).thenReturn(10050);
+        when(containerProperties.getMemoryLimit()).thenReturn("512m");
+        when(containerProperties.getCpuLimit()).thenReturn("0.5");
+        when(containerProperties.getRestartPolicy()).thenReturn("unless-stopped");
+        when(containerProperties.getHealthCheckPath()).thenReturn("/");
+        when(containerProperties.getStopTimeoutSeconds()).thenReturn(10);
+        when(projectEnvironmentVariableService.getDecryptedEnvironmentVariablesForDeployment(any()))
+                .thenReturn(Map.of("API_KEY", "super-secret-key"));
+        when(dockerContainerService.runContainer(any(), any())).thenReturn("c1234567890abcdef");
+        when(containerHealthChecker.verifyHealth(any(), anyInt(), any(), any())).thenReturn(true);
+        when(deploymentRepository.findByProjectIdAndContainerIdIsNotNullAndIdNot(any(), any()))
+                .thenReturn(List.of());
     }
 
     @Test
-    @DisplayName("handleDeployment - Successfully executes clone, detect, generate, build and lifecycle transitions to SUCCESS")
+    @DisplayName("handleDeployment - Successfully executes clone, detect, generate, build, run container, health check and transitions to SUCCESS")
     void handleDeployment_Success() {
         when(deploymentRepository.findByIdWithDetails(deploymentId)).thenReturn(Optional.of(sampleDeployment));
         when(deploymentRepository.findById(deploymentId)).thenReturn(Optional.of(sampleDeployment));
@@ -161,16 +202,43 @@ class DefaultDeploymentTaskHandlerTest {
         verify(dockerfileGenerator).generateDockerfile(eq(sampleWorkspace), eq(sampleBuildPlan), any());
         verify(dockerBuildService).buildImage(eq(sampleWorkspace), eq(sampleBuildPlan), any());
 
-        // Verify image tag updated on deployment
+        // Verify container engine components were invoked
+        verify(portAllocator).allocatePort();
+        verify(projectEnvironmentVariableService).getDecryptedEnvironmentVariablesForDeployment(sampleProject.getId());
+
+        ArgumentCaptor<ContainerConfig> configCaptor = ArgumentCaptor.forClass(ContainerConfig.class);
+        verify(dockerContainerService).runContainer(configCaptor.capture(), any());
+
+        ContainerConfig config = configCaptor.getValue();
+        assertThat(config.getDeploymentId()).isEqualTo(deploymentId);
+        assertThat(config.getProjectId()).isEqualTo(sampleProject.getId());
+        assertThat(config.getHostPort()).isEqualTo(10050);
+        assertThat(config.getContainerPort()).isEqualTo(8080);
+        assertThat(config.getImageTag()).isEqualTo("shipit/sample-app:abc1234");
+        assertThat(config.getContainerName()).isEqualTo("shipit-sample-app-" + deploymentId.toString().substring(0, 8));
+        assertThat(config.getMemoryLimit()).isEqualTo("512m");
+        assertThat(config.getCpuLimit()).isEqualTo("0.5");
+        assertThat(config.getRestartPolicy()).isEqualTo("unless-stopped");
+        assertThat(config.getEnvironmentVariables()).containsEntry("API_KEY", "super-secret-key");
+        assertThat(config.getEnvironmentVariables()).containsEntry("PORT", "8080");
+        assertThat(config.getEnvironmentVariables()).containsEntry("SHIPIT_DEPLOYMENT_ID", deploymentId.toString());
+        assertThat(config.getEnvironmentVariables()).containsEntry("SHIPIT_PROJECT_ID", sampleProject.getId().toString());
+
+        // Verify container health check was invoked
+        verify(containerHealthChecker).verifyHealth(eq("c1234567890abcdef"), eq(10050), eq("/"), any());
+
+        // Verify container metadata updated on deployment
         assertThat(sampleDeployment.getDockerImageTag()).isEqualTo("shipit/sample-app:abc1234");
-        verify(deploymentRepository).save(sampleDeployment);
+        assertThat(sampleDeployment.getContainerId()).isEqualTo("c1234567890abcdef");
+        assertThat(sampleDeployment.getContainerPort()).isEqualTo(10050);
+        verify(deploymentRepository, atLeast(2)).save(sampleDeployment);
 
         // Verify cleanup in finally
         verify(buildLogService).storeLogs(eq(deploymentId), any());
         verify(workspaceManager).deleteWorkspace(deploymentId);
 
         // Verify heartbeat recorded at multiple stages
-        verify(jobService, atLeast(5)).recordHeartbeat(jobId);
+        verify(jobService, atLeast(6)).recordHeartbeat(jobId);
     }
 
     @Test
@@ -270,5 +338,95 @@ class DefaultDeploymentTaskHandlerTest {
         verify(deploymentService).transitionStatus(deploymentId, DeploymentStatus.FAILED, "Docker build error: compilation failure");
         verify(buildLogService).storeLogs(eq(deploymentId), any());
         verify(workspaceManager).deleteWorkspace(deploymentId);
+    }
+
+    @Test
+    @DisplayName("handleDeployment - Failure during port allocation halts execution and marks deployment FAILED")
+    void handleDeployment_FailureInPortAllocation() {
+        when(deploymentRepository.findByIdWithDetails(deploymentId)).thenReturn(Optional.of(sampleDeployment));
+        when(deploymentRepository.findById(deploymentId)).thenReturn(Optional.of(sampleDeployment));
+
+        doThrow(new ContainerException("No available ports in range", "PORT_EXHAUSTION"))
+                .when(portAllocator).allocatePort();
+
+        assertThatThrownBy(() -> taskHandler.handleDeployment(sampleJob))
+                .isInstanceOf(ContainerException.class)
+                .hasMessageContaining("No available ports");
+
+        verify(deploymentService).transitionStatus(deploymentId, DeploymentStatus.FAILED, "No available ports in range");
+        verify(dockerContainerService, never()).runContainer(any(), any());
+        verify(containerHealthChecker, never()).verifyHealth(any(), anyInt(), any(), any());
+    }
+
+    @Test
+    @DisplayName("handleDeployment - Failure during container execution rolls back allocated port and marks FAILED")
+    void handleDeployment_FailureInContainerRun() {
+        when(deploymentRepository.findByIdWithDetails(deploymentId)).thenReturn(Optional.of(sampleDeployment));
+        when(deploymentRepository.findById(deploymentId)).thenReturn(Optional.of(sampleDeployment));
+
+        doThrow(new ContainerException("Docker run failed: port already in use", "CONTAINER_RUN_FAILED"))
+                .when(dockerContainerService).runContainer(any(), any());
+
+        assertThatThrownBy(() -> taskHandler.handleDeployment(sampleJob))
+                .isInstanceOf(ContainerException.class)
+                .hasMessageContaining("Docker run failed");
+
+        // Rollback port
+        verify(portAllocator).releasePort(10050);
+        verify(deploymentService).transitionStatus(deploymentId, DeploymentStatus.FAILED, "Docker run failed: port already in use");
+        verify(containerHealthChecker, never()).verifyHealth(any(), anyInt(), any(), any());
+    }
+
+    @Test
+    @DisplayName("handleDeployment - Failure during health check rolls back container and port and marks FAILED")
+    void handleDeployment_FailureInHealthCheck() {
+        when(deploymentRepository.findByIdWithDetails(deploymentId)).thenReturn(Optional.of(sampleDeployment));
+        when(deploymentRepository.findById(deploymentId)).thenReturn(Optional.of(sampleDeployment));
+
+        doThrow(new ContainerException("Container crashed on startup", "CONTAINER_CRASHED"))
+                .when(containerHealthChecker).verifyHealth(any(), anyInt(), any(), any());
+
+        assertThatThrownBy(() -> taskHandler.handleDeployment(sampleJob))
+                .isInstanceOf(ContainerException.class)
+                .hasMessageContaining("Container crashed");
+
+        // Rollback container and port
+        verify(dockerContainerService).removeContainer("c1234567890abcdef", true);
+        verify(portAllocator).releasePort(10050);
+        verify(deploymentService).transitionStatus(deploymentId, DeploymentStatus.FAILED, "Container crashed on startup");
+    }
+
+    @Test
+    @DisplayName("handleDeployment - Successfully cleans up previous running container for same project upon success")
+    void handleDeployment_CleansUpPreviousContainersOnSuccess() {
+        when(deploymentRepository.findByIdWithDetails(deploymentId)).thenReturn(Optional.of(sampleDeployment));
+        when(deploymentRepository.findById(deploymentId)).thenReturn(Optional.of(sampleDeployment));
+
+        UUID oldDepId = UUID.randomUUID();
+        Deployment oldDeployment = Deployment.builder()
+                .id(oldDepId)
+                .project(sampleProject)
+                .containerId("old-container-xyz")
+                .containerPort(10049)
+                .status(DeploymentStatus.SUCCESS)
+                .build();
+
+        when(deploymentRepository.findByProjectIdAndContainerIdIsNotNullAndIdNot(sampleProject.getId(), deploymentId))
+                .thenReturn(List.of(oldDeployment));
+
+        taskHandler.handleDeployment(sampleJob);
+
+        // Previous container stopped and removed
+        verify(dockerContainerService).stopContainer("old-container-xyz", 10);
+        verify(dockerContainerService).removeContainer("old-container-xyz", true);
+        verify(portAllocator).releasePort(10049);
+
+        // Old deployment container metadata cleared
+        assertThat(oldDeployment.getContainerId()).isNull();
+        assertThat(oldDeployment.getContainerPort()).isNull();
+        verify(deploymentRepository).save(oldDeployment);
+
+        // New deployment succeeded
+        verify(deploymentService).transitionStatus(deploymentId, DeploymentStatus.SUCCESS, null);
     }
 }
