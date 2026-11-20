@@ -37,5 +37,13 @@ public interface DeploymentRepository extends JpaRepository<Deployment, UUID> {
 
     List<Deployment> findByProjectIdAndContainerIdIsNotNullAndIdNot(UUID projectId, UUID id);
 
+    List<Deployment> findByStatusAndContainerIdIsNotNull(DeploymentStatus status);
+
+    Optional<Deployment> findTopByProjectIdAndStatusOrderByCreatedAtDesc(UUID projectId, DeploymentStatus status);
+
     long countByProjectId(UUID projectId);
+
+    long countByProjectIdAndStatus(UUID projectId, DeploymentStatus status);
+
+    List<Deployment> findAllByProjectId(UUID projectId);
 }

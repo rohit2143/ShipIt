@@ -1876,6 +1876,132 @@
         }
       ],
       "description": "Endpoints for real-time Server-Sent Events log streaming, structured historical log queries, and raw log file downloads."
+    },
+    {
+      "name": "9. Health Monitoring & Deployment History (Module 9)",
+      "item": [
+        {
+          "name": "1. Get Deployment Health & Metrics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/deployments/{{deploymentId}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "deployments",
+                "{{deploymentId}}",
+                "health"
+              ]
+            },
+            "description": "Inspects active HTTP health probe status, availability, and live hardware resource metrics (CPU %, Memory, restarts, uptime) for a deployment."
+          },
+          "response": []
+        },
+        {
+          "name": "2. Get Project Active Health",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/projects/{{projectId}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "projects",
+                "{{projectId}}",
+                "health"
+              ]
+            },
+            "description": "Retrieves the live health report and resource metrics for the active deployment of a project."
+          },
+          "response": []
+        },
+        {
+          "name": "3. Get Project Deployment History & Analytics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/projects/{{projectId}}/deployment-history?page=0&size=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "projects",
+                "{{projectId}}",
+                "deployment-history"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0",
+                  "description": "Page index (0-based)"
+                },
+                {
+                  "key": "size",
+                  "value": "20",
+                  "description": "Page size"
+                }
+              ]
+            },
+            "description": "Retrieves aggregated statistics (success rate %, average duration, failure counts, active deployment) and a paginated rollout timeline for a project."
+          },
+          "response": []
+        },
+        {
+          "name": "4. Get Deployment Execution Timeline",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/deployments/{{deploymentId}}/timeline",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "deployments",
+                "{{deploymentId}}",
+                "timeline"
+              ]
+            },
+            "description": "Retrieves execution duration, commit details, trigger type, and error information for an individual deployment."
+          },
+          "response": []
+        }
+      ],
+      "description": "Endpoints for real-time application health probing, container hardware metrics, availability status, and historical deployment analytics."
     }
   ]
 }
