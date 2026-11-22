@@ -1,10 +1,59 @@
-HELP.md
-target/
-.mvn/wrapper/maven-wrapper.jar
-!**/src/main/**/target/
-!**/src/test/**/target/
+# ==============================================================================
+# ShipIt - Root .gitignore
+# ==============================================================================
 
-### STS ###
+# ------------------------------------------------------------------------------
+# Local Environment, Credentials & Secrets (CRITICAL - NEVER COMMIT)
+# ------------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+**/secrets/
+test_conn.py
+.shipit-env
+~/.shipit-env
+
+# ------------------------------------------------------------------------------
+# Backend (Java / Spring Boot / Maven)
+# ------------------------------------------------------------------------------
+backend/target/
+**/target/
+backend/.mvn/wrapper/maven-wrapper.jar
+**/.mvn/wrapper/maven-wrapper.jar
+backend/logs/
+**/logs/
+*.log
+
+# ------------------------------------------------------------------------------
+# Frontend (Node.js / React / Vite)
+# ------------------------------------------------------------------------------
+frontend/node_modules/
+**/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+**/dist/
+**/dist-ssr/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+*.local
+
+# ------------------------------------------------------------------------------
+# IDEs, Editors & Tooling
+# ------------------------------------------------------------------------------
+.idea/
+**/.idea/
+*.iws
+*.iml
+*.ipr
+.vscode/
+**/.vscode/
+!.vscode/extensions.json
 .apt_generated
 .classpath
 .factorypath
@@ -12,32 +61,12 @@ target/
 .settings
 .springBeans
 .sts4-cache
+.ai/
 
-### IntelliJ IDEA ###
-.idea
-*.iws
-*.iml
-*.ipr
-
-### NetBeans ###
-/nbproject/private/
-/nbbuild/
-/dist/
-/nbdist/
-/.nb-gradle/
-build/
-!**/src/main/**/build/
-!**/src/test/**/build/
-
-### VS Code ###
-.vscode/
-# Local environment and secrets
-.env
-.env.*
-!.env.example
-*.pem
-secrets/
-
-# IDE and OS files
+# ------------------------------------------------------------------------------
+# OS Artifacts
+# ------------------------------------------------------------------------------
 .DS_Store
 Thumbs.db
+ehthumbs.db
+[Dd]esktop.ini
