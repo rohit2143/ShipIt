@@ -39,6 +39,9 @@ class OAuthServiceTest {
     private GitHubOAuthClient gitHubOAuthClient;
 
     @Mock
+    private GoogleOAuthClient googleOAuthClient;
+
+    @Mock
     private UserAuthIdentityRepository identityRepository;
 
     @Mock
@@ -229,5 +232,97 @@ class OAuthServiceTest {
         oAuthService.unlinkIdentity(userId, AuthProvider.GITHUB);
 
         verify(identityRepository).delete(identity);
+    }
+
+    @Test
+    @DisplayName("Should register new user and link Google identity when first logging in via Google")
+    void shouldRegisterNewGoogleUser() {
+        OAuthLoginRequest request = OAuthLoginRequest.builder().code("google-code-123").build();
+        GoogleUserProfile googleProfile = new GoogleUserProfile("g-sub-123", "Google Dev", "dev@gmail.com", "https://pic.url");
+        User googleUser = User.builder()
+                .id(UUID.randomUUID())
+                .name("Google Dev")
+                .email("dev@gmail.com")
+                .role(Role.ROLE_USER)
+                .status(UserStatus.ACTIVE)
+                .emailVerified(true)
+                .build();
+
+        when(googleOAuthClient.exchangeCodeForAccessToken("google-code-123", null)).thenReturn("google_token");
+        when(googleOAuthClient.fetchUserProfile("google_token")).thenReturn(googleProfile);
+        when(identityRepository.findByProviderAndProviderUserId(AuthProvider.GOOGLE, "g-sub-123"))
+                .thenReturn(Optional.empty());
+        when(userRepository.findByEmail("dev@gmail.com")).thenReturn(Optional.empty());
+        when(userService.createUser("Google Dev", "dev@gmail.com", Role.ROLE_USER, UserStatus.ACTIVE, true))
+                .thenReturn(googleUser);
+        when(jwtService.generateAccessToken(googleUser)).thenReturn("jwt.token.google");
+        when(jwtProperties.getAccessTokenExpirationSeconds()).thenReturn(900L);
+
+        RefreshToken refreshTokenEntity = RefreshToken.builder().build();
+        when(refreshTokenService.createRefreshToken(eq(googleUser), any(), any()))
+                .thenReturn(new RefreshTokenService.RotatedToken("refresh.token.google", refreshTokenEntity));
+
+        AuthResponse response = oAuthService.authenticateWithGoogle(request, "Agent/1.0", "127.0.0.1");
+
+        assertThat(response).isNotNull();
+        assertThat(response.getUser().getEmail()).isEqualTo("dev@gmail.com");
+        assertThat(response.getTokens().getAccessToken()).isEqualTo("jwt.token.google");
+
+        verify(identityRepository).save(any(UserAuthIdentity.class));
+    }
+
+    @Test
+    @DisplayName("Should authenticate existing Google identity directly")
+    void shouldAuthenticateExistingGoogleUser() {
+        OAuthLoginRequest request = OAuthLoginRequest.builder().code("google-code-123").build();
+        GoogleUserProfile googleProfile = new GoogleUserProfile("g-sub-123", "Google Dev", "dev@gmail.com", "https://pic.url");
+        User googleUser = User.builder()
+                .id(UUID.randomUUID())
+                .name("Google Dev")
+                .email("dev@gmail.com")
+                .role(Role.ROLE_USER)
+                .status(UserStatus.ACTIVE)
+                .emailVerified(true)
+                .build();
+
+        UserAuthIdentity existingIdentity = UserAuthIdentity.builder()
+                .user(googleUser)
+                .provider(AuthProvider.GOOGLE)
+                .providerUserId("g-sub-123")
+                .build();
+
+        when(googleOAuthClient.exchangeCodeForAccessToken("google-code-123", null)).thenReturn("google_token");
+        when(googleOAuthClient.fetchUserProfile("google_token")).thenReturn(googleProfile);
+        when(identityRepository.findByProviderAndProviderUserId(AuthProvider.GOOGLE, "g-sub-123"))
+                .thenReturn(Optional.of(existingIdentity));
+        when(jwtService.generateAccessToken(googleUser)).thenReturn("jwt.token.google");
+        when(jwtProperties.getAccessTokenExpirationSeconds()).thenReturn(900L);
+
+        RefreshToken refreshTokenEntity = RefreshToken.builder().build();
+        when(refreshTokenService.createRefreshToken(eq(googleUser), any(), any()))
+                .thenReturn(new RefreshTokenService.RotatedToken("refresh.token.google", refreshTokenEntity));
+
+        AuthResponse response = oAuthService.authenticateWithGoogle(request, "Agent/1.0", "127.0.0.1");
+
+        assertThat(response).isNotNull();
+        assertThat(response.getUser().getEmail()).isEqualTo("dev@gmail.com");
+        assertThat(response.getTokens().getAccessToken()).isEqualTo("jwt.token.google");
+    }
+
+    @Test
+    @DisplayName("Should throw ConflictException when Google user email already exists locally without linked identity")
+    void shouldRejectGoogleLoginWhenEmailAlreadyExistsLocally() {
+        OAuthLoginRequest request = OAuthLoginRequest.builder().code("google-code-123").build();
+        GoogleUserProfile googleProfile = new GoogleUserProfile("g-sub-123", "Google Dev", "dev@gmail.com", "https://pic.url");
+
+        when(googleOAuthClient.exchangeCodeForAccessToken("google-code-123", null)).thenReturn("google_token");
+        when(googleOAuthClient.fetchUserProfile("google_token")).thenReturn(googleProfile);
+        when(identityRepository.findByProviderAndProviderUserId(AuthProvider.GOOGLE, "g-sub-123"))
+                .thenReturn(Optional.empty());
+        when(userRepository.findByEmail("dev@gmail.com")).thenReturn(Optional.of(sampleUser));
+
+        assertThatThrownBy(() -> oAuthService.authenticateWithGoogle(request, "Agent/1.0", "127.0.0.1"))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Please log in with your email and password to link your Google account");
     }
 }

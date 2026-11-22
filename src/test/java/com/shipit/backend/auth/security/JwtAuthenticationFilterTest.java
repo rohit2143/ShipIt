@@ -149,4 +149,34 @@ class JwtAuthenticationFilterTest {
         verify(filterChain).doFilter(request, response);
         verifyNoInteractions(userDetailsService);
     }
+
+    @Test
+    @DisplayName("Should authenticate request when valid token query parameter is provided")
+    void shouldAuthenticateValidTokenParam() throws ServletException, IOException {
+        UUID userId = UUID.randomUUID();
+        String rawJwt = "valid.param.jwt";
+
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setParameter("token", rawJwt);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        User user = User.builder()
+                .id(userId)
+                .name("Param User")
+                .email("param@shipit.dev")
+                .role(Role.ROLE_USER)
+                .status(UserStatus.ACTIVE)
+                .build();
+        UserPrincipal principal = UserPrincipal.create(user);
+
+        when(jwtService.isTokenValid(rawJwt)).thenReturn(true);
+        when(jwtService.extractUserId(rawJwt)).thenReturn(userId);
+        when(userDetailsService.loadUserById(userId)).thenReturn(principal);
+
+        jwtAuthenticationFilter.doFilterInternal(request, response, filterChain);
+
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
+        assertThat(SecurityContextHolder.getContext().getAuthentication().getPrincipal()).isEqualTo(principal);
+        verify(filterChain).doFilter(request, response);
+    }
 }

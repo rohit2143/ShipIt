@@ -32,6 +32,18 @@ public class OAuthController {
         return ResponseEntity.ok(ApiResponse.success("GitHub authentication successful", response));
     }
 
+    @PostMapping("/google")
+    public ResponseEntity<ApiResponse<AuthResponse>> loginWithGoogle(
+            @Valid @RequestBody OAuthLoginRequest request,
+            HttpServletRequest servletRequest
+    ) {
+        String userAgent = servletRequest.getHeader("User-Agent");
+        String ipAddress = extractClientIp(servletRequest);
+
+        AuthResponse response = oAuthService.authenticateWithGoogle(request, userAgent, ipAddress);
+        return ResponseEntity.ok(ApiResponse.success("Google authentication successful", response));
+    }
+
     private String extractClientIp(HttpServletRequest request) {
         String xfHeader = request.getHeader("X-Forwarded-For");
         if (xfHeader == null || xfHeader.isBlank()) {
