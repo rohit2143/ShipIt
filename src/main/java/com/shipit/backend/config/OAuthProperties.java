@@ -12,6 +12,7 @@ import org.springframework.context.annotation.Configuration;
 public class OAuthProperties {
 
     private GitHub github = new GitHub();
+    private Google google = new Google();
 
     @Getter
     @Setter
@@ -19,5 +20,13 @@ public class OAuthProperties {
         private String clientId = "";
         private String clientSecret = "";
         private String redirectUri = "http://localhost:5173/auth/callback/github";
+    }
+
+    @Getter
+    @Setter
+    public static class Google {
+        private String clientId = "";
+        private String clientSecret = "";
+        private String redirectUri = "http://localhost:5173/auth/callback/google";
     }
 }

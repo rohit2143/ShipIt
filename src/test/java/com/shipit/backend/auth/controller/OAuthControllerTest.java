@@ -138,4 +138,53 @@ class OAuthControllerTest {
                 .andExpect(jsonPath("$.errorCode").value("ACCOUNT_EXISTS_LINK_REQUIRED"))
                 .andExpect(jsonPath("$.message").value(containsString("Please log in with your email and password")));
     }
+
+    @Test
+    @DisplayName("Should authenticate with Google and return 200 with tokens")
+    void shouldAuthenticateWithGoogleSuccessfully() throws Exception {
+        String payload = """
+                {
+                    "code": "valid-google-code-123",
+                    "redirectUri": "http://localhost:5173/auth/callback/google"
+                }
+                """;
+
+        when(oAuthService.authenticateWithGoogle(any(OAuthLoginRequest.class), any(), any()))
+                .thenReturn(sampleAuthResponse);
+
+        mockMvc.perform(post("/api/v1/auth/oauth/google")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload)
+                        .header("User-Agent", "Mozilla/5.0")
+                        .header("X-Forwarded-For", "203.0.113.195"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.message").value("Google authentication successful"))
+                .andExpect(jsonPath("$.data.user.email").value("octo@github.com"))
+                .andExpect(jsonPath("$.data.tokens.accessToken").value("gh-jwt-token"))
+                .andExpect(jsonPath("$.data.tokens.refreshToken").value("gh-refresh-token"));
+
+        verify(oAuthService, times(1)).authenticateWithGoogle(any(OAuthLoginRequest.class), eq("Mozilla/5.0"), eq("203.0.113.195"));
+    }
+
+    @Test
+    @DisplayName("Should reject Google authentication request with 400 when code is blank")
+    void shouldFailGoogleValidationWhenCodeIsBlank() throws Exception {
+        String payload = """
+                {
+                    "code": "",
+                    "redirectUri": "http://localhost:5173/auth/callback/google"
+                }
+                """;
+
+        mockMvc.perform(post("/api/v1/auth/oauth/google")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.errorCode").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.errors[*].field", hasItem("code")));
+
+        verifyNoInteractions(oAuthService);
+    }
 }

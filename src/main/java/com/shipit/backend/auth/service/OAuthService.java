@@ -32,6 +32,7 @@ import java.util.UUID;
 public class OAuthService {
 
     private final GitHubOAuthClient gitHubOAuthClient;
+    private final GoogleOAuthClient googleOAuthClient;
     private final UserAuthIdentityRepository identityRepository;
     private final UserRepository userRepository;
     private final UserService userService;
@@ -106,6 +107,72 @@ public class OAuthService {
     }
 
     @Transactional
+    public AuthResponse authenticateWithGoogle(OAuthLoginRequest request, String userAgent, String ipAddress) {
+        String accessToken = googleOAuthClient.exchangeCodeForAccessToken(request.getCode(), request.getRedirectUri());
+        GoogleUserProfile profile = googleOAuthClient.fetchUserProfile(accessToken);
+
+        // 1. Check if identity exists by (GOOGLE, googleId)
+        Optional<UserAuthIdentity> existingIdentity =
+                identityRepository.findByProviderAndProviderUserId(AuthProvider.GOOGLE, profile.id());
+
+        User user;
+        if (existingIdentity.isPresent()) {
+            user = existingIdentity.get().getUser();
+            if (user.getStatus() == UserStatus.SUSPENDED) {
+                throw new ForbiddenException("Account has been suspended");
+            }
+            log.info("Existing Google user logged in with id: {}", user.getId());
+        } else {
+            // 2. Identity does not exist. Check if user with that email already exists in ShipIt
+            Optional<User> existingUserByEmail = userRepository.findByEmail(profile.email());
+            if (existingUserByEmail.isPresent()) {
+                // SECURITY GUARD: Never auto-merge by email
+                log.warn("Google login attempt for existing email {} without linked Google identity", profile.email());
+                throw new ConflictException(
+                        "An account with this email already exists. Please log in with your email and password to link your Google account.",
+                        "ACCOUNT_EXISTS_LINK_REQUIRED"
+                );
+            }
+
+            // 3. Register new user + GOOGLE identity
+            user = userService.createUser(
+                    profile.name(),
+                    profile.email(),
+                    Role.ROLE_USER,
+                    UserStatus.ACTIVE,
+                    true // Google emails are verified
+            );
+
+            UserAuthIdentity newIdentity = UserAuthIdentity.builder()
+                    .user(user)
+                    .provider(AuthProvider.GOOGLE)
+                    .providerUserId(profile.id())
+                    .passwordHash(null)
+                    .build();
+            identityRepository.save(newIdentity);
+
+            log.info("Registered new user {} with Google identity {}", user.getId(), profile.id());
+        }
+
+        // Issue JWT & refresh token
+        String jwtToken = jwtService.generateAccessToken(user);
+        RefreshTokenService.RotatedToken refreshToken =
+                refreshTokenService.createRefreshToken(user, userAgent, ipAddress);
+
+        TokenResponse tokenResponse = TokenResponse.builder()
+                .accessToken(jwtToken)
+                .refreshToken(refreshToken.rawToken())
+                .tokenType("Bearer")
+                .expiresIn(jwtProperties.getAccessTokenExpirationSeconds())
+                .build();
+
+        return AuthResponse.builder()
+                .user(UserResponse.fromUser(user))
+                .tokens(tokenResponse)
+                .build();
+    }
+
+    @Transactional
     public IdentityResponse linkGitHubAccount(UUID userId, String code, String redirectUri) {
         User user = userService.getById(userId);
 
@@ -145,6 +212,49 @@ public class OAuthService {
 
         UserAuthIdentity saved = identityRepository.save(newIdentity);
         log.info("Successfully linked GitHub account {} to user {}", profile.id(), userId);
+        return IdentityResponse.fromEntity(saved);
+    }
+
+    @Transactional
+    public IdentityResponse linkGoogleAccount(UUID userId, String code, String redirectUri) {
+        User user = userService.getById(userId);
+
+        String accessToken = googleOAuthClient.exchangeCodeForAccessToken(code, redirectUri);
+        GoogleUserProfile profile = googleOAuthClient.fetchUserProfile(accessToken);
+
+        // Check if this Google account is already linked to anyone
+        Optional<UserAuthIdentity> existingIdentity =
+                identityRepository.findByProviderAndProviderUserId(AuthProvider.GOOGLE, profile.id());
+
+        if (existingIdentity.isPresent()) {
+            if (existingIdentity.get().getUser().getId().equals(userId)) {
+                log.info("Google account {} is already linked to user {}", profile.id(), userId);
+                return IdentityResponse.fromEntity(existingIdentity.get());
+            } else {
+                throw new ConflictException(
+                        "This Google account is already linked to another ShipIt user.",
+                        "GOOGLE_ALREADY_LINKED"
+                );
+            }
+        }
+
+        // Check if current user already has another Google identity linked
+        if (identityRepository.existsByUserIdAndProvider(userId, AuthProvider.GOOGLE)) {
+            throw new ConflictException(
+                    "You already have a Google account linked. Unlink it first to link a different one.",
+                    "PROVIDER_ALREADY_LINKED"
+            );
+        }
+
+        UserAuthIdentity newIdentity = UserAuthIdentity.builder()
+                .user(user)
+                .provider(AuthProvider.GOOGLE)
+                .providerUserId(profile.id())
+                .passwordHash(null)
+                .build();
+
+        UserAuthIdentity saved = identityRepository.save(newIdentity);
+        log.info("Successfully linked Google account {} to user {}", profile.id(), userId);
         return IdentityResponse.fromEntity(saved);
     }
 
