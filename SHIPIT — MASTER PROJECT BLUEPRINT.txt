@@ -1,0 +1,1491 @@
+# SHIPIT — MASTER PROJECT BLUEPRINT
+## Project Vision, Architecture, Modules, Features, Development Roadmap & AI Implementation Instructions
+
+---
+
+# 1. PROJECT OVERVIEW
+
+Project Name: ShipIt
+
+Project Type: Mini Platform-as-a-Service (PaaS) / Push-to-Deploy Platform
+
+Primary Goal: Build a lightweight, self-hosted deployment platform inspired by services such as Vercel, Render, and Heroku.
+
+ShipIt will allow developers to connect a GitHub repository, trigger a deployment, build a Docker image, run the application in a container, and access the deployed application through a URL.
+
+The platform should also provide deployment history, build logs, application health information, and intelligent deployment failure analysis.
+
+ShipIt is being developed as a serious portfolio project to demonstrate practical Java backend engineering, Docker, infrastructure automation, deployment orchestration, security, and system design skills.
+
+This is not intended to be another basic CRUD application.
+
+The primary focus is to build a working deployment engine with a clean architecture and meaningful engineering decisions.
+
+## Core Product Workflow
+
+1. A developer registers and logs into ShipIt.
+2. The developer connects their GitHub account.
+3. The developer selects a GitHub repository.
+4. ShipIt stores the project configuration.
+5. A deployment is triggered manually or through a GitHub webhook.
+6. ShipIt creates a deployment job.
+7. The deployment worker clones the repository.
+8. ShipIt detects the application type.
+9. ShipIt builds a Docker image.
+10. ShipIt starts the application inside a Docker container.
+11. ShipIt performs a health check.
+12. The deployment status is updated.
+13. The developer can inspect deployment logs and history.
+14. The deployed application becomes accessible through its assigned URL.
+
+Additional capabilities will include:
+
+- Live deployment logs.
+- Deployment history.
+- Rollback to previous successful deployments.
+- Application health monitoring.
+- Deployment failure analysis.
+- Resource monitoring.
+- Intelligent troubleshooting recommendations.
+
+The platform will initially focus on Java/Spring Boot applications. Additional application types can be introduced later.
+
+---
+
+# 2. DEVELOPMENT PHILOSOPHY
+
+ShipIt must be developed incrementally.
+
+We will not attempt to build the entire platform in one prompt or one implementation session.
+
+The development process will follow this workflow:
+
+PLAN → REVIEW → APPROVE → IMPLEMENT → TEST → REVIEW → COMMIT → NEXT BATCH
+
+## Mandatory Batch-Based Development Rule
+
+EVERY major feature MUST be divided into small, logical implementation batches.
+
+For example, Authentication should not be implemented in one enormous operation. It should be divided into batches such as:
+
+- Batch 1: User entity and repository.
+- Batch 2: User registration.
+- Batch 3: Login and JWT generation.
+- Batch 4: Spring Security configuration.
+- Batch 5: Authentication tests and integration.
+
+The same approach must be applied to every other feature.
+
+IMPORTANT:
+
+We will build each feature step by step and in batches so that tokens are used efficiently.
+
+This is a mandatory project rule, not an optional recommendation.
+
+For every feature:
+
+1. First inspect the existing implementation.
+2. Understand the dependencies and current architecture.
+3. Prepare a feature implementation plan.
+4. Divide the feature into small, independent batches.
+5. Explain what each batch will implement.
+6. Identify the files likely to be created or modified.
+7. Identify dependencies and expected tests.
+8. Wait for explicit user approval.
+9. Implement ONLY the currently approved batch.
+10. Run relevant tests and build verification.
+11. Report changed files, implementation details, test results, and any issues.
+12. Stop and wait for the user's next instruction.
+
+Do not automatically continue to another batch.
+
+Do not implement multiple batches just because they belong to the same feature.
+
+Do not regenerate existing files unnecessarily.
+
+Do not repeatedly explain the entire architecture in every response.
+
+Inspect only the files relevant to the current task.
+
+Keep implementation reports concise and useful.
+
+Avoid consuming tokens on unnecessary explanations, repeated code, speculative features, or premature implementation.
+
+A feature is considered complete only when all its planned batches are implemented, integrated, tested, and meet their acceptance criteria.
+
+---
+
+# 3. COMPLETED ENVIRONMENT AND PROJECT SETUP
+
+The following setup has already been completed and verified.
+
+## Development Environment
+
+- Operating System: Windows 11.
+- Linux Environment: Ubuntu 24.04 through WSL2.
+- WSL Version: 2.
+- IDE / AI Coding Environment: Antigravity.
+- Additional AI Coding Assistant: Codex.
+- Hardware: AMD Ryzen 5 3500U, 8 GB RAM.
+- Development Budget: ₹0.
+
+The development environment must remain lightweight because the machine has limited RAM.
+
+## Installed and Verified Tools
+
+| Tool | Version / Status |
+|---|---|
+| Ubuntu | 24.04 |
+| WSL | WSL2 |
+| Java | OpenJDK 21 |
+| Git | 2.43.0 |
+| Docker | 29.1.3 |
+| Docker Compose | 2.40.3 |
+| PostgreSQL | 17.11 |
+| Spring Boot | 4.1.2 |
+| Maven | Maven Wrapper |
+
+Docker Desktop is installed on Windows, configured with the WSL2 backend, and integrated with Ubuntu.
+
+Docker has been tested successfully using the hello-world container.
+
+## Project Directory
+
+Current project location:
+
+~/projects/ShipIt/backend
+
+Current backend structure:
+
+backend/
+├── .gitattributes
+├── .gitignore
+├── .mvn/
+├── mvnw
+├── mvnw.cmd
+├── pom.xml
+└── src/
+    ├── main/
+    │   ├── java/
+    │   │   └── com/shipit/backend/
+    │   │       └── ShipitBackendApplication.java
+    │   └── resources/
+    │       └── application.properties
+    └── test/
+        └── java/
+            └── com/shipit/backend/
+                └── ShipitBackendApplicationTests.java
+
+The project currently has a Maven-based Spring Boot backend.
+
+## Spring Initializr Configuration
+
+- Project: Maven
+- Language: Java
+- Packaging: Jar
+- Java: 21
+- Spring Boot: 4.1.2
+- Group: com.shipit
+- Artifact: shipit-backend
+- Package: com.shipit.backend
+
+Currently included dependencies:
+
+- Spring Boot Actuator
+- Spring Data JPA
+- Spring Boot Validation
+- Spring WebMVC
+- PostgreSQL JDBC Driver
+- Lombok
+- Relevant Spring Boot test dependencies
+
+Spring Security and JWT dependencies have intentionally been deferred until the authentication implementation phase.
+
+Do not add dependencies without a clear architectural requirement.
+
+## PostgreSQL Setup
+
+A PostgreSQL 17 Docker container has been created.
+
+Container name: shipit-postgres
+
+Database name: shipit
+
+Database username: shipit_user
+
+Local development password: supplied through DB_PASSWORD.
+
+Docker volume: shipit_postgres_data
+
+Port mapping: 5432:5432
+
+The PostgreSQL container has been verified using pg_isready.
+
+The application has successfully connected to PostgreSQL.
+
+## Current Application Configuration
+
+The application uses environment-variable-based database configuration.
+
+Relevant configuration:
+
+spring.datasource.url=${DB_URL:jdbc:postgresql://localhost:5432/shipit}
+spring.datasource.username=${DB_USERNAME:shipit_user}
+spring.datasource.password=${DB_PASSWORD}
+spring.datasource.driver-class-name=org.postgresql.Driver
+
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.show-sql=true
+spring.jpa.properties.hibernate.format_sql=true
+spring.jpa.open-in-view=false
+
+server.port=8080
+
+management.endpoints.web.exposure.include=health,info
+
+The local .env file is excluded through .gitignore.
+
+Do not expose database credentials or other secrets in source code, Git commits, logs, or documentation.
+
+## Verified Backend Status
+
+The following have already succeeded:
+
+- Maven clean package.
+- Spring Boot application startup.
+- PostgreSQL connectivity.
+- Hibernate initialization.
+- JPA EntityManagerFactory initialization.
+- Tomcat startup on port 8080.
+- Actuator health endpoint.
+
+Health endpoint:
+
+http://localhost:8080/actuator/health
+
+Verified response:
+
+{"groups":["liveness","readiness"],"status":"UP"}
+
+The initial Git repository was initialized inside the backend directory.
+
+Current branch: main
+
+Initial commit:
+
+chore: initialize ShipIt backend project
+
+Commit hash:
+
+ac4e383
+
+The working tree was verified clean after the initial commit.
+
+GitHub repository intended for the project:
+
+https://github.com/rohit2143/ShipIt
+
+IMPORTANT REPOSITORY NOTE:
+
+Git is currently initialized inside backend/, not the parent ShipIt/ directory.
+
+The eventual architecture should have one Git repository at the ShipIt project root containing both backend and frontend.
+
+Before moving or reinitializing Git, inspect the current repository, remote configuration, commit history, and GitHub state. Do not delete or overwrite the existing Git history. Propose a safe migration plan and wait for approval.
+
+Do not assume that a GitHub push succeeded unless verified.
+
+---
+
+# 4. TECHNOLOGY STACK
+
+The following is the intended technology stack.
+
+## Backend
+
+- Java 21
+- Spring Boot 4.1.2
+- Spring WebMVC
+- Spring Data JPA
+- Hibernate
+- Spring Security
+- JWT authentication
+- Bean Validation
+- Spring Boot Actuator
+- Maven
+
+Use Spring Boot 4.1.2-compatible dependencies and APIs. Verify compatibility before introducing third-party libraries.
+
+## Database
+
+- PostgreSQL 17
+
+Use relational database design with proper foreign keys, constraints, indexes, and transactions.
+
+## Frontend
+
+- React
+- Vite
+- JavaScript initially, unless TypeScript is justified and approved.
+- A clean dashboard UI.
+- REST API integration.
+
+Frontend implementation should begin only after the essential backend APIs and contracts are established.
+
+## Containerization
+
+- Docker
+- Docker Compose
+- Docker Engine through Docker Desktop / WSL2.
+
+## Infrastructure
+
+- Nginx or Traefik as a reverse proxy, with the final choice based on the simplest reliable architecture.
+- Linux-based deployment environment.
+- AWS EC2 as a possible future hosting target, but only when budget and deployment constraints permit.
+
+## Other Technologies
+
+- GitHub REST API.
+- GitHub webhooks.
+- WebSockets for live logs.
+- Database-backed background job queue.
+- Docker Java integration through a suitable library or controlled Docker CLI abstraction.
+
+## Technologies Intentionally Deferred
+
+Do not introduce these technologies during the initial development without explicit approval:
+
+- Kubernetes.
+- RabbitMQ.
+- Redis.
+- Microservices.
+- GraphQL.
+- Paid cloud services.
+- Paid LLM APIs.
+- Complex distributed tracing infrastructure.
+
+The initial architecture should be a modular monolith with a lightweight background worker.
+
+Do not overengineer.
+
+---
+
+# 5. SYSTEM ARCHITECTURE
+
+ShipIt should initially use a modular monolith.
+
+The backend should contain logically separated modules with clear responsibilities.
+
+The application should not be split into multiple microservices.
+
+The deployment engine should operate through a background job processing mechanism.
+
+The initial job queue should be database-backed to avoid introducing Redis or RabbitMQ.
+
+## High-Level Architecture
+
+Developer
+    |
+    v
+React Dashboard
+    |
+    v
+Spring Boot Backend
+    |
+    +---- Authentication
+    |
+    +---- User Management
+    |
+    +---- GitHub Integration
+    |
+    +---- Project Management
+    |
+    +---- Deployment Management
+    |
+    +---- Job Management
+    |
+    +---- Build Engine
+    |
+    +---- Container Management
+    |
+    +---- Logs Management
+    |
+    +---- Deployment Intelligence
+    |
+    v
+PostgreSQL
+
+Deployment Worker
+    |
+    +---- Fetch Repository
+    |
+    +---- Detect Application
+    |
+    +---- Build Docker Image
+    |
+    +---- Start Container
+    |
+    +---- Health Check
+    |
+    +---- Update Deployment Status
+
+Docker Engine
+    |
+    v
+Application Containers
+
+Reverse Proxy
+    |
+    v
+Deployed Applications
+
+## Architectural Rules
+
+1. Keep business logic outside controllers.
+2. Use service classes for business operations.
+3. Use repositories for database access.
+4. Use DTOs for API request and response objects.
+5. Do not expose JPA entities directly through APIs.
+6. Use proper exception handling.
+7. Keep modules loosely coupled.
+8. Avoid circular dependencies.
+9. Use transactions where required.
+10. Make deployment operations asynchronous.
+11. Keep Docker operations isolated behind dedicated interfaces/services.
+12. Keep deployment intelligence separate from the deployment engine.
+13. The platform must continue functioning even if the intelligence module is unavailable.
+14. Avoid unnecessary abstractions and design patterns.
+
+---
+
+# 6. BACKEND MODULES AND FEATURES
+
+The following modules define the intended product.
+
+They are a roadmap, not permission to implement everything immediately.
+
+## MODULE 0 — PROJECT FOUNDATION
+
+Purpose: Establish the backend's core architecture and development standards.
+
+Features:
+
+- Standard package structure.
+- Configuration management.
+- Environment-based configuration.
+- Global exception handling.
+- Standard API response conventions.
+- Logging conventions.
+- Health monitoring.
+- Database configuration.
+- Basic integration testing.
+- Development documentation.
+
+Suggested package structure:
+
+com.shipit.backend
+    ├── auth
+    ├── user
+    ├── project
+    ├── github
+    ├── deployment
+    ├── job
+    ├── build
+    ├── container
+    ├── logs
+    ├── intelligence
+    ├── common
+    └── config
+
+The exact package structure should be reviewed before implementation.
+
+Do not create empty packages for every future module unnecessarily.
+
+Acceptance criteria:
+
+- Backend builds successfully.
+- Application starts successfully.
+- PostgreSQL connection works.
+- Health endpoint works.
+- Global error handling is verified.
+- Configuration is safe for local development.
+
+## MODULE 1 — AUTHENTICATION AND USER MANAGEMENT
+
+Purpose: Secure access to the ShipIt platform.
+
+Features:
+
+- User registration.
+- User login.
+- Password hashing.
+- JWT access tokens.
+- Authentication filters.
+- Spring Security configuration.
+- Current user endpoint.
+- User profile management.
+- Logout/token invalidation strategy if required.
+- Role-based authorization where needed.
+
+Initial roles may include:
+
+- USER
+- ADMIN
+
+Do not implement unnecessary roles or complex permissions.
+
+Security requirements:
+
+- Never store plaintext passwords.
+- Use a secure password hashing algorithm.
+- Validate incoming requests.
+- Protect private APIs.
+- Never expose sensitive user information.
+- Use appropriate JWT expiration and signing configuration.
+- Keep JWT secrets outside Git.
+
+## MODULE 2 — GITHUB INTEGRATION
+
+Purpose: Allow users to connect their repositories.
+
+Features:
+
+- GitHub OAuth integration.
+- Secure GitHub account connection.
+- Repository listing.
+- Repository selection.
+- Repository metadata storage.
+- Branch selection.
+- Repository access validation.
+- GitHub webhook registration or configuration.
+- Webhook signature verification.
+- Push event processing.
+
+Security requirements:
+
+- Store tokens securely.
+- Never log access tokens.
+- Verify webhook signatures.
+- Prevent unauthorized repository access.
+- Handle duplicate webhook deliveries safely.
+- Do not execute arbitrary webhook payload data.
+
+## MODULE 3 — PROJECT MANAGEMENT
+
+Purpose: Let developers manage their applications.
+
+Features:
+
+- Create project.
+- List projects.
+- Get project details.
+- Update project configuration.
+- Delete project.
+- Associate project with GitHub repository.
+- Select deployment branch.
+- Configure application settings.
+- Configure environment variables.
+- Configure build settings.
+
+Each project should belong to an authenticated user.
+
+Ensure proper ownership validation.
+
+## MODULE 4 — DEPLOYMENT MANAGEMENT
+
+Purpose: Manage deployment requests and deployment history.
+
+Features:
+
+- Trigger manual deployment.
+- Trigger deployment from GitHub push events.
+- Create deployment records.
+- Deployment status tracking.
+- Deployment metadata.
+- Associate deployments with commits.
+- Track deployment start and end times.
+- Track build and runtime outcomes.
+- List deployment history.
+- View deployment details.
+- Cancel queued deployments where safe.
+- Retry failed deployments.
+
+Suggested deployment statuses:
+
+- QUEUED
+- CLONING
+- DETECTING
+- BUILDING
+- STARTING
+- HEALTH_CHECKING
+- SUCCESS
+- FAILED
+- CANCELLED
+
+Use explicit state transitions.
+
+Prevent invalid status changes.
+
+## MODULE 5 — BACKGROUND JOB MANAGEMENT
+
+Purpose: Execute deployment workflows without blocking HTTP requests.
+
+Features:
+
+- Database-backed job queue.
+- Job creation.
+- Job claiming.
+- Job execution.
+- Job status tracking.
+- Retry handling.
+- Failure handling.
+- Duplicate execution protection.
+- Basic worker lifecycle management.
+- Recovery of interrupted jobs where possible.
+
+The initial implementation must remain lightweight.
+
+Do not introduce RabbitMQ or Redis.
+
+Consider concurrency, transaction boundaries, and race conditions.
+
+## MODULE 6 — BUILD ENGINE
+
+Purpose: Convert source code into deployable Docker images.
+
+Features:
+
+- Clone selected GitHub repository.
+- Checkout selected branch and commit.
+- Detect application type.
+- Detect Maven-based Spring Boot projects.
+- Detect Gradle-based Java projects later.
+- Detect build configuration.
+- Generate or use an appropriate Dockerfile.
+- Build Docker image.
+- Capture build output.
+- Store image metadata.
+- Record build duration.
+- Handle build failures.
+- Clean temporary build directories.
+
+Initial supported application type:
+
+Java / Spring Boot applications using Maven.
+
+Later support can include:
+
+- Gradle Java applications.
+- Node.js applications.
+- Python applications.
+- Static frontend applications.
+
+Do not implement all application types initially.
+
+Security requirements:
+
+- Treat repository content as untrusted.
+- Do not execute arbitrary build commands on the host.
+- Use isolated build environments.
+- Apply resource limits.
+- Avoid privileged containers.
+- Avoid mounting sensitive host directories.
+- Never expose Docker daemon access publicly.
+- Restrict access to temporary files.
+- Clean up build resources safely.
+
+## MODULE 7 — CONTAINER DEPLOYMENT ENGINE
+
+Purpose: Run successfully built applications.
+
+Features:
+
+- Create application containers.
+- Assign unique container identifiers.
+- Configure container environment variables.
+- Configure application ports.
+- Start containers.
+- Stop containers.
+- Restart containers.
+- Inspect container status.
+- Apply resource limits.
+- Perform health checks.
+- Record container metadata.
+- Associate containers with deployments.
+- Clean up old containers safely.
+
+The Docker integration must be isolated behind a dedicated service/interface.
+
+Do not allow arbitrary users to issue unrestricted Docker commands.
+
+Initial deployment can use local port mappings.
+
+Public application URLs and reverse proxy routing will be implemented later.
+
+## MODULE 8 — DEPLOYMENT LOGS
+
+Purpose: Provide visibility into deployment execution.
+
+Features:
+
+- Capture clone logs.
+- Capture build logs.
+- Capture container startup logs.
+- Capture application logs where appropriate.
+- Store logs against deployment IDs.
+- Retrieve historical logs.
+- Stream logs through WebSockets.
+- Support deployment-specific log filtering.
+- Handle large logs without loading everything into memory.
+
+Logs should be timestamped and associated with the appropriate deployment and stage.
+
+Security:
+
+- Redact secrets.
+- Avoid logging tokens and passwords.
+- Limit log size and retention.
+- Prevent log injection issues.
+
+## MODULE 9 — HEALTH MONITORING AND DEPLOYMENT HISTORY
+
+Purpose: Provide visibility into running applications.
+
+Features:
+
+- Deployment health status.
+- Container running/stopped status.
+- Application health checks.
+- Restart count.
+- CPU usage.
+- Memory usage.
+- Basic deployment metrics.
+- Historical deployment information.
+- Basic service availability information.
+
+Start with lightweight metrics.
+
+Do not introduce a full monitoring stack unless justified.
+
+## MODULE 10 — ROLLBACK MANAGEMENT
+
+Purpose: Allow developers to recover from bad deployments.
+
+Features:
+
+- Preserve successful deployment metadata.
+- Identify previous successful deployments.
+- Trigger rollback.
+- Restart a previous image/version.
+- Update active deployment information.
+- Verify health after rollback.
+- Record rollback history.
+- Handle rollback failures.
+
+Rollback must be safe and must not silently delete previous working images.
+
+## MODULE 11 — SHIPIT INTELLIGENCE / DEPLOYMENT DOCTOR
+
+This is an important differentiating feature.
+
+Purpose: Analyze deployment failures and provide useful, evidence-based troubleshooting recommendations.
+
+ShipIt Intelligence should initially be deterministic and rule-based.
+
+It must not depend on paid LLM APIs.
+
+Features:
+
+- Analyze build logs.
+- Analyze runtime logs.
+- Identify common Maven compilation failures.
+- Identify missing environment variables.
+- Identify Docker build failures.
+- Identify application startup failures.
+- Identify database connectivity issues.
+- Identify health-check failures.
+- Extract relevant error messages.
+- Identify the deployment stage where failure occurred.
+- Suggest possible causes.
+- Recommend corrective actions.
+- Display the evidence supporting each diagnosis.
+
+Example:
+
+Failure:
+Spring Boot application failed to start.
+
+Evidence:
+Connection refused while connecting to PostgreSQL.
+
+Possible cause:
+The configured database host or port is unreachable.
+
+Suggested action:
+Verify database availability and datasource configuration.
+
+The system must distinguish between:
+
+- Confirmed facts from logs.
+- Likely causes.
+- Possible explanations.
+- Suggested fixes.
+
+Never invent log evidence.
+
+Never claim a root cause is certain without sufficient evidence.
+
+Later enhancements:
+
+- CPU and memory trend analysis.
+- Restart pattern detection.
+- Release regression detection.
+- Rollback recommendations.
+- JVM and Actuator metrics analysis.
+- Optional LLM-based explanation layer.
+
+The intelligence module must be independent of the core deployment workflow.
+
+A failure in ShipIt Intelligence must never prevent a deployment from being executed.
+
+## MODULE 12 — REVERSE PROXY AND APPLICATION URLS
+
+Purpose: Provide convenient application access.
+
+Features:
+
+- Assign application identifiers.
+- Generate application subdomains.
+- Configure Nginx or Traefik routing.
+- Route incoming requests to the correct container.
+- Handle port mapping.
+- Manage application lifecycle.
+- Support HTTPS in a future hosted environment.
+
+Example:
+
+myapp.shipit.local
+
+For the local development phase, use a practical local routing strategy.
+
+Public DNS and domain configuration are future deployment concerns.
+
+## MODULE 13 — FRONTEND DASHBOARD
+
+Purpose: Provide a user-friendly interface.
+
+Technology:
+
+- React.
+- Vite.
+
+Main pages:
+
+1. Login.
+2. Registration.
+3. Dashboard.
+4. Projects.
+5. Create project.
+6. GitHub repository selection.
+7. Project details.
+8. Deployment history.
+9. Deployment details.
+10. Live build logs.
+11. Environment variable management.
+12. Application health information.
+13. Deployment Doctor.
+14. Settings.
+
+UI requirements:
+
+- Clean, modern developer dashboard.
+- Responsive layout.
+- Clear loading and error states.
+- Deployment status indicators.
+- Useful empty states.
+- Live log updates.
+- Good API error handling.
+
+Avoid unnecessary animations and visual complexity.
+
+The frontend must reflect actual backend capabilities, not mock functionality presented as complete.
+
+---
+
+# 7. RECOMMENDED DEVELOPMENT ROADMAP
+
+Implement features in dependency order.
+
+The following is the recommended roadmap. The AI may suggest adjustments, but must explain the reason and obtain approval before changing the approved sequence.
+
+PHASE 0 — FOUNDATION
+
+- Inspect existing project.
+- Verify Spring Boot setup.
+- Establish package architecture.
+- Establish common API conventions.
+- Establish exception handling.
+- Establish configuration standards.
+- Establish tests.
+- Prepare project documentation.
+
+PHASE 1 — AUTHENTICATION
+
+- User entity.
+- User repository.
+- Registration.
+- Password hashing.
+- Login.
+- JWT.
+- Spring Security.
+- Authentication tests.
+
+PHASE 2 — PROJECT AND GITHUB MANAGEMENT
+
+- Project data model.
+- Project CRUD.
+- User ownership.
+- GitHub OAuth.
+- Repository listing.
+- Repository selection.
+- Branch configuration.
+- Webhook setup and verification.
+
+PHASE 3 — DEPLOYMENT MANAGEMENT
+
+- Deployment entity.
+- Deployment API.
+- Deployment status model.
+- Manual deployment trigger.
+- Deployment history.
+- Deployment detail endpoint.
+
+PHASE 4 — BACKGROUND JOB SYSTEM
+
+- Job entity.
+- Job repository.
+- Job creation.
+- Job claiming.
+- Worker execution.
+- Retry handling.
+- Failure recovery.
+- Integration with deployment management.
+
+PHASE 5 — BUILD ENGINE
+
+- Repository cloning.
+- Branch and commit checkout.
+- Application detection.
+- Maven project detection.
+- Dockerfile strategy.
+- Docker image build.
+- Build logs.
+- Build failure handling.
+
+PHASE 6 — CONTAINER ENGINE
+
+- Container creation.
+- Container configuration.
+- Container startup.
+- Container lifecycle management.
+- Health checks.
+- Resource limits.
+- Deployment-to-container association.
+
+PHASE 7 — LOGGING
+
+- Build log persistence.
+- Runtime logs.
+- Deployment log retrieval.
+- WebSocket log streaming.
+- Log filtering and redaction.
+
+PHASE 8 — DEPLOYMENT DOCTOR
+
+- Log parsing.
+- Error classification.
+- Evidence extraction.
+- Rule-based diagnosis.
+- Suggested fixes.
+- Diagnosis API.
+- Diagnostic tests.
+
+PHASE 9 — HEALTH MONITORING AND ROLLBACK
+
+- Container health monitoring.
+- Basic resource monitoring.
+- Deployment history enhancements.
+- Rollback workflow.
+- Rollback verification.
+
+PHASE 10 — REVERSE PROXY AND ROUTING
+
+- Local application routing.
+- Reverse proxy configuration.
+- Application URL assignment.
+- Routing lifecycle management.
+
+PHASE 11 — FRONTEND DASHBOARD
+
+- React/Vite setup.
+- Authentication UI.
+- Dashboard.
+- Project management.
+- GitHub integration UI.
+- Deployment management UI.
+- Live logs.
+- Deployment Doctor interface.
+- Health and rollback UI.
+
+PHASE 12 — FINAL HARDENING AND DOCUMENTATION
+
+- Unit testing.
+- Integration testing.
+- Security review.
+- Deployment workflow testing.
+- Error handling review.
+- Resource management review.
+- Documentation.
+- Architecture diagrams.
+- API documentation.
+- Setup guide.
+- Demo preparation.
+
+The roadmap is not permission to implement every phase at once.
+
+Only work on the currently approved phase and batch.
+
+---
+
+# 8. DATABASE DESIGN GUIDELINES
+
+The database schema should evolve with the implementation.
+
+Potential entities include:
+
+- User
+- Project
+- GitHubConnection
+- Deployment
+- DeploymentJob
+- BuildLog
+- ContainerInstance
+- EnvironmentVariable
+- DeploymentDiagnosis
+- RollbackRecord
+
+Do not create all entities at the beginning.
+
+Create entities only when their corresponding feature is being implemented.
+
+Design proper relationships, constraints, indexes, and ownership boundaries.
+
+Avoid storing sensitive credentials in plaintext.
+
+Consider database migrations using a suitable migration tool when schema evolution becomes important. Do not introduce one without explaining the dependency and migration strategy.
+
+---
+
+# 9. API DESIGN GUIDELINES
+
+Use REST APIs initially.
+
+Follow consistent resource naming.
+
+Example future API structure:
+
+/api/v1/auth/register
+/api/v1/auth/login
+/api/v1/users/me
+
+/api/v1/projects
+/api/v1/projects/{projectId}
+
+/api/v1/projects/{projectId}/deployments
+/api/v1/deployments/{deploymentId}
+
+/api/v1/deployments/{deploymentId}/logs
+/api/v1/deployments/{deploymentId}/diagnosis
+
+/api/v1/github/connect
+/api/v1/github/repositories
+
+These are proposed endpoint examples, not permission to implement them immediately.
+
+Use:
+
+- Correct HTTP methods.
+- Appropriate status codes.
+- Request validation.
+- DTOs.
+- Consistent error responses.
+- Pagination where appropriate.
+- Ownership checks.
+- Authentication and authorization.
+
+Avoid returning unnecessary internal implementation details.
+
+---
+
+# 10. SECURITY REQUIREMENTS
+
+Security is essential because ShipIt will eventually execute code from GitHub repositories.
+
+Mandatory rules:
+
+1. Never store passwords in plaintext.
+2. Never commit secrets.
+3. Never expose Docker daemon access publicly.
+4. Never execute arbitrary repository code directly on the host.
+5. Use isolated Docker build environments.
+6. Avoid privileged containers.
+7. Apply CPU and memory limits.
+8. Restrict container capabilities.
+9. Avoid unnecessary host filesystem mounts.
+10. Validate GitHub webhook signatures.
+11. Protect GitHub access tokens.
+12. Redact secrets from logs.
+13. Validate and sanitize user input.
+14. Enforce project ownership.
+15. Prevent unauthorized deployment operations.
+16. Handle concurrent deployment requests safely.
+17. Prevent duplicate job execution.
+18. Clean up temporary build resources.
+19. Never expose environment variables through public APIs.
+20. Do not trust repository content or webhook payloads.
+
+For the local prototype, prioritize trusted repositories and safe execution.
+
+Before supporting arbitrary public users or untrusted repositories, perform a separate threat-model and security review.
+
+---
+
+# 11. PERFORMANCE AND RESOURCE CONSTRAINTS
+
+The development laptop has 8 GB RAM.
+
+Therefore:
+
+- Keep Docker containers lightweight.
+- Avoid running unnecessary services simultaneously.
+- Prefer one Spring Boot backend.
+- Prefer one PostgreSQL container.
+- Do not use microservices.
+- Do not introduce Redis or RabbitMQ initially.
+- Avoid heavyweight monitoring stacks.
+- Avoid unnecessary dependencies.
+- Avoid large in-memory log buffers.
+- Process long-running deployment operations asynchronously.
+- Use pagination for historical data.
+- Clean up temporary files and unused build artifacts.
+- Use resource limits for build and application containers.
+
+Development budget is ₹0.
+
+Prefer free, local development tools and services.
+
+Do not require paid APIs or cloud infrastructure for the initial working prototype.
+
+Public cloud deployment can be considered later.
+
+---
+
+# 12. TESTING STRATEGY
+
+Testing must be part of implementation, not an activity postponed until the end.
+
+For every batch:
+
+- Add relevant unit tests.
+- Add integration tests when appropriate.
+- Test validation failures.
+- Test error conditions.
+- Test security boundaries.
+- Test database interactions where relevant.
+- Verify existing functionality is not broken.
+
+Use the testing tools already available through the Spring Boot project.
+
+Do not claim a feature is complete if it has not been tested.
+
+Report:
+
+- Tests executed.
+- Tests passed.
+- Tests failed.
+- Build result.
+- Known limitations.
+
+Do not skip tests simply to obtain a successful build.
+
+---
+
+# 13. CODING STANDARDS
+
+Follow these rules:
+
+- Use Java 21.
+- Use clear, meaningful class and method names.
+- Follow standard Java conventions.
+- Prefer readable code over clever code.
+- Keep methods focused.
+- Avoid unnecessary abstractions.
+- Avoid duplicated business logic.
+- Keep controllers thin.
+- Use DTOs for API boundaries.
+- Use constructor injection.
+- Handle exceptions centrally where appropriate.
+- Validate inputs.
+- Use transactions correctly.
+- Avoid exposing entities directly.
+- Avoid giant service classes.
+- Avoid unnecessary Lombok annotations.
+- Document non-obvious design decisions.
+- Keep dependencies minimal.
+- Follow Spring Boot 4.1.2-compatible APIs.
+
+Do not generate large amounts of boilerplate without a real requirement.
+
+Do not modify unrelated files.
+
+Do not replace working code without a clear reason.
+
+---
+
+# 14. AI CODING AGENT OPERATING INSTRUCTIONS
+
+These instructions apply equally to Antigravity and Codex.
+
+You are acting as a senior Java backend architect, software engineer, DevOps engineer, and technical mentor.
+
+Your job is to help build ShipIt according to this blueprint.
+
+The user is the project owner and makes final architecture and implementation decisions.
+
+## Operating Modes
+
+Understand these user commands:
+
+"Inspect the project"
+
+Inspect the current workspace and report the existing state. Do not modify files.
+
+"Plan the next feature"
+
+Review the roadmap, identify dependencies, and prepare a batch-wise implementation plan. Do not write code.
+
+"Plan this feature in batches"
+
+Divide the specified feature into small logical batches, including scope, files, dependencies, and acceptance criteria.
+
+"Implement Batch N"
+
+Implement only the explicitly approved batch.
+
+"Review the implementation"
+
+Inspect the changed code, identify bugs, architectural issues, security problems, and missing tests. Do not modify code unless asked.
+
+"Run tests"
+
+Run relevant tests and report exact results.
+
+"Debug this"
+
+Investigate the reported problem, identify its root cause, explain the fix, and make changes only when authorized.
+
+"Move to the next batch"
+
+Proceed only to the next planned batch after inspecting the current implementation.
+
+"Move to the next feature"
+
+First verify that the current feature is complete. Then prepare the next feature plan and wait for approval.
+
+## Mandatory Rules
+
+1. Never implement the entire project in one operation.
+2. Never implement an entire major feature in one enormous batch.
+3. Always divide features into smaller batches.
+4. Never implement an unapproved batch.
+5. Never automatically move to the next batch.
+6. Never silently change the architecture.
+7. Never introduce unnecessary dependencies.
+8. Never generate duplicate classes or configurations.
+9. Always inspect existing code before modifying it.
+10. Always preserve working functionality.
+11. Always run relevant verification after implementation.
+12. Never claim tests passed without running them.
+13. Never claim functionality exists when it is only mocked or partially implemented.
+14. Keep responses concise and technically useful.
+15. Stop after completing the requested batch.
+
+## Token Efficiency Rules
+
+This project will be developed using AI coding agents, so token efficiency is important.
+
+- Inspect only relevant files.
+- Do not repeatedly read the entire project unnecessarily.
+- Do not repeat this blueprint in every response.
+- Do not regenerate unchanged files.
+- Do not produce unnecessarily long explanations.
+- Do not implement future functionality prematurely.
+- Do not create speculative abstractions.
+- Do not output entire files unless necessary.
+- Prefer targeted changes.
+- Keep implementation reports concise.
+- Ask one focused clarification question if a critical requirement is unclear.
+
+The mandatory approach is:
+
+ONE FEATURE → SMALL BATCHES → ONE APPROVED BATCH AT A TIME → TEST → REVIEW → WAIT.
+
+---
+
+# 15. CURRENT PROJECT STATE AND FIRST TASK
+
+The project currently has a working Spring Boot backend and PostgreSQL connection.
+
+The initial environment setup and first Git commit are complete.
+
+Do not recreate the project.
+
+Do not replace the existing Spring Initializr configuration.
+
+Do not reinstall tools that are already installed.
+
+Do not recreate the PostgreSQL container.
+
+Do not regenerate the initial application.
+
+The first task is:
+
+## TASK 1 — INSPECT THE EXISTING WORKSPACE
+
+Before writing code:
+
+1. Inspect the current workspace.
+2. Identify the actual project root.
+3. Identify the current Git repository root.
+4. Inspect the current backend package structure.
+5. Inspect pom.xml.
+6. Inspect application.properties without revealing secret values.
+7. Inspect .gitignore.
+8. Inspect existing tests.
+9. Verify the current Spring Boot configuration.
+10. Identify any mismatch between the current implementation and this blueprint.
+
+Remember:
+
+Git is currently initialized in backend/, not the ShipIt parent directory.
+
+Do not change Git structure or move files automatically.
+
+Report:
+
+- Existing project structure.
+- Current dependencies.
+- Current application configuration.
+- Existing Git status and remote, if accessible.
+- Architectural gaps.
+- Recommended next steps.
+
+Do not modify any files during this inspection.
+
+Wait for the user's approval before preparing the implementation plan for Module 0.
+
+---
+
+# 16. DEFINITION OF DONE
+
+ShipIt should ultimately demonstrate a complete working deployment lifecycle:
+
+1. A developer registers and authenticates.
+2. The developer connects GitHub.
+3. The developer selects a repository.
+4. The developer creates a project.
+5. A push or manual action triggers deployment.
+6. ShipIt creates a background job.
+7. The worker clones the repository.
+8. ShipIt detects a supported Java application.
+9. ShipIt builds a Docker image.
+10. ShipIt runs the application in a container.
+11. ShipIt verifies application health.
+12. ShipIt assigns an accessible application URL.
+13. The dashboard displays deployment status.
+14. Build and runtime logs are available.
+15. Failed deployments receive evidence-based troubleshooting.
+16. Previous successful deployments can be restored.
+
+The platform must have meaningful tests, security controls, documentation, and a reproducible local setup.
+
+A successful demo should prove that ShipIt actually deploys a GitHub application rather than merely displaying a simulated deployment dashboard.
+
+---
+
+# FINAL INSTRUCTION
+
+Read and understand this entire blueprint before beginning.
+
+Treat it as the source of truth for the ShipIt project.
+
+Start by inspecting the existing workspace only.
+
+Do not write or modify code until the user approves the inspection results and the next implementation plan.
+
+Remember the most important development rule:
+
+WE WILL BUILD EACH FEATURE STEP BY STEP, IN SMALL, LOGICAL BATCHES. IMPLEMENT ONLY ONE APPROVED BATCH AT A TIME, TEST IT, REPORT THE RESULTS, AND WAIT FOR THE NEXT INSTRUCTION. THIS IS MANDATORY TO USE TOKENS EFFICIENTLY, PREVENT UNNECESSARY CODE GENERATION, AND MAINTAIN CONTROL OVER THE PROJECT.
+
+
+
+# SHIPIT — SCOPE AND CACHING ADDENDUM
+
+**Purpose:** This addendum records the latest scope and caching decisions. It supplements the master blueprint and does not replace or modify any existing section. The original blueprint remains the primary reference.
+
+## 1. Initial Development Scope
+
+The initial ShipIt implementation will include all modules from the beginning of the master blueprint **through MODULE 9 — HEALTH MONITORING AND DEPLOYMENT HISTORY, inclusive**.
+
+- MODULE 9 is part of the initial implementation.
+- Every module after MODULE 9 is considered a future upgrade.
+- Do not start implementing modules beyond MODULE 9 during the initial development.
+- Future modules must remain documented in the master blueprint for later development.
+
+This scope decision is about implementation priority. It does not mean that future modules should be deleted or removed from the architecture documentation.
+
+## 2. Caching Strategy
+
+Caching should be introduced when there is a practical use case, rather than adding caching technologies without a clear requirement.
+
+### Initial approach
+- Use Docker BuildKit layer caching in the build engine to reuse previously built image layers and reduce repeated build times.
+- Consider Caffeine for lightweight, in-memory application caching when a concrete use case arises.
+- Use Spring Cache abstraction if application-level caching is introduced.
+
+### Redis
+- Redis is deferred for now.
+- Do not introduce Redis merely to make the architecture appear more advanced.
+- Reconsider Redis in a future upgrade if ShipIt requires distributed caching, shared state across multiple instances, or other capabilities that justify it.
+
+### Caching principles
+Any cache introduced must have a clear purpose and an appropriate strategy for:
+- TTL and expiration.
+- Maximum cache size.
+- Cache invalidation.
+- Data consistency.
+- Memory usage.
+
+Do not unnecessarily cache frequently changing deployment statuses, deployment logs, environment variables, or secrets. PostgreSQL remains the source of truth for application data and deployment jobs.
+
+## 3. Instructions for AI Coding Agents
+
+- Follow the initial implementation scope through MODULE 9, inclusive.
+- Do not implement future modules unless explicitly instructed.
+- Preserve the existing master blueprint and treat this addendum as an additional scope decision.
+- Follow the caching strategy above when designing and implementing relevant components.
+- Do not introduce Redis or additional infrastructure without explicit approval.
+- If a future requirement makes a deferred technology necessary, explain the reason and wait for approval before introducing it.
+
+**End of Addendum**
