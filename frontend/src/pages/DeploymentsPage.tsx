@@ -11,11 +11,22 @@ import {
   FolderGit2,
   Search,
   ArrowDownCircle,
-  History
+  History,
+  GitBranch,
+  ExternalLink,
+  ChevronRight,
+  Terminal as TerminalIcon,
+  Copy,
+  Check
 } from 'lucide-react';
 import { useProjects } from '../context/ProjectContext';
 import { deploymentsApi } from '../api/deployments';
 import type { Deployment, DeploymentLogEntry, DeploymentStatus } from '../types/deployment';
+import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
+import { Button } from '../components/ui/Button';
+import { Badge } from '../components/ui/Badge';
+import { Skeleton } from '../components/ui/Skeleton';
+import { useToast } from '../context/ToastContext';
 
 const STAGES = [
   { key: 'QUEUED', label: '1. QUEUED', title: 'Job Enqueued' },
@@ -40,6 +51,7 @@ const STAGE_ORDER: Record<string, number> = {
 
 export const DeploymentsPage: React.FC = () => {
   const { activeProject, projects, selectProject } = useProjects();
+  const toast = useToast();
 
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [selectedDeployment, setSelectedDeployment] = useState<Deployment | null>(null);
@@ -52,6 +64,7 @@ export const DeploymentsPage: React.FC = () => {
   const [sseState, setSseState] = useState<'CONNECTING' | 'CONNECTED' | 'COMPLETED' | 'DISCONNECTED'>('DISCONNECTED');
   const [autoScroll, setAutoScroll] = useState(true);
   const [filterQuery, setFilterQuery] = useState('');
+  const [copiedLogs, setCopiedLogs] = useState(false);
   const terminalEndRef = useRef<HTMLDivElement | null>(null);
 
   // 1. Fetch deployments when active project changes
@@ -168,8 +181,9 @@ export const DeploymentsPage: React.FC = () => {
       });
       setDeployments((prev) => [newDep, ...prev]);
       setSelectedDeployment(newDep);
-    } catch (err: unknown) {
-      alert('Failed to trigger deployment. Please ensure a worker is available.');
+      toast.success(`Deployment job triggered for branch ${activeProject.deploymentBranch || 'main'}`);
+    } catch {
+      toast.error('Failed to trigger deployment. Please ensure a worker is available.');
     } finally {
       setIsTriggering(false);
     }
@@ -178,15 +192,16 @@ export const DeploymentsPage: React.FC = () => {
   // Handle Cancel Deployment
   const handleCancelDeployment = async () => {
     if (!selectedDeployment || isCancelling) return;
-    if (!confirm('Are you sure you want to cancel this deployment?')) return;
+    if (!window.confirm('Are you sure you want to cancel this deployment?')) return;
 
     setIsCancelling(true);
     try {
       const updated = await deploymentsApi.cancelDeployment(selectedDeployment.id);
       setSelectedDeployment(updated);
       setDeployments((prev) => prev.map((d) => d.id === updated.id ? updated : d));
+      toast.info('Deployment has been cancelled.');
     } catch {
-      alert('Failed to cancel deployment.');
+      toast.error('Failed to cancel deployment.');
     } finally {
       setIsCancelling(false);
     }
@@ -199,9 +214,19 @@ export const DeploymentsPage: React.FC = () => {
       const newDep = await deploymentsApi.retryDeployment(selectedDeployment.id);
       setDeployments((prev) => [newDep, ...prev]);
       setSelectedDeployment(newDep);
+      toast.success('Re-deployment enqueued successfully.');
     } catch {
-      alert('Failed to retry deployment.');
+      toast.error('Failed to retry deployment.');
     }
+  };
+
+  // Copy Logs to Clipboard
+  const handleCopyLogs = () => {
+    const rawText = logs.map((l) => `[${l.stage}] ${l.message}`).join('\n');
+    navigator.clipboard.writeText(rawText);
+    setCopiedLogs(true);
+    toast.success('Deployment logs copied to clipboard');
+    setTimeout(() => setCopiedLogs(false), 2000);
   };
 
   // Filtered log lines
@@ -214,198 +239,230 @@ export const DeploymentsPage: React.FC = () => {
 
   if (!activeProject) {
     return (
-      <div className="rounded-xl bg-slate-900 border border-slate-800 p-12 text-center space-y-4">
-        <div className="w-12 h-12 rounded-xl bg-slate-800 flex items-center justify-center mx-auto text-slate-400">
-          <FolderGit2 className="w-6 h-6" />
+      <Card className="p-12 text-center space-y-4">
+        <div className="w-14 h-14 rounded-2xl bg-[#171E34] border border-[#252D46] flex items-center justify-center mx-auto text-[#A78BFA] shadow-lg shadow-[#8B5CF6]/5">
+          <FolderGit2 className="w-7 h-7" />
         </div>
         <div>
-          <h3 className="text-base font-semibold text-slate-200">No Project Selected</h3>
+          <h3 className="text-base font-semibold text-white">No Project Selected</h3>
           <p className="text-xs text-slate-400 max-w-sm mx-auto mt-1">
-            Select or create a project to inspect its deployment lifecycle, active container, and real-time streaming logs.
+            Select or create a project from the top navigation to inspect its deployment lifecycle, active container, and real-time streaming logs.
           </p>
         </div>
-      </div>
+      </Card>
     );
   }
 
   return (
     <div className="space-y-6">
       {/* Top Action & Project Selector Bar */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-slate-900 border border-slate-800 p-4 rounded-xl shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-blue-600/20 border border-blue-500/30 text-blue-400 flex items-center justify-center font-bold">
-            <Rocket className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <select
-                value={activeProject.id}
-                onChange={(e) => selectProject(e.target.value)}
-                className="font-bold text-sm text-slate-100 bg-transparent border-none cursor-pointer focus:outline-none hover:text-blue-400 transition-colors"
-              >
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id} className="bg-slate-900 text-slate-200">
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-              <span className="text-xs font-mono text-slate-400">
-                ({activeProject.repositoryFullName || 'Local Repo'})
-              </span>
+      <Card className="p-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#8B5CF6]/20 to-[#3B82F6]/20 border border-[#8B5CF6]/30 text-[#A78BFA] flex items-center justify-center shadow-inner">
+              <Rocket className="w-5 h-5 text-[#A78BFA]" />
             </div>
-            <p className="text-xs text-slate-400 font-mono">
-              Branch: <span className="text-slate-200 font-medium">{activeProject.deploymentBranch || 'main'}</span>
-              {activeProject.port && (
-                <span className="ml-3 text-indigo-400">Port: {activeProject.port}</span>
-              )}
-            </p>
+            <div>
+              <div className="flex items-center gap-2">
+                <select
+                  value={activeProject.id}
+                  onChange={(e) => selectProject(e.target.value)}
+                  className="font-bold text-sm text-white bg-[#080B14] border border-[#252D46] rounded-lg px-2.5 py-1 cursor-pointer focus:outline-none focus:border-[#8B5CF6] transition-colors"
+                >
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id} className="bg-[#0D1120] text-slate-200">
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+                <span className="text-xs font-mono text-slate-400 hidden sm:inline">
+                  {activeProject.repositoryFullName || 'Local Repo'}
+                </span>
+              </div>
+              <div className="flex items-center gap-2.5 mt-1 text-xs font-mono text-slate-400">
+                <span className="flex items-center gap-1">
+                  <GitBranch className="w-3 h-3 text-slate-500" />
+                  <span className="text-slate-200 font-medium">{activeProject.deploymentBranch || 'main'}</span>
+                </span>
+                {activeProject.port && (
+                  <>
+                    <span className="text-slate-600">•</span>
+                    <a
+                      href={`http://localhost:${activeProject.port}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[#60A5FA] hover:underline flex items-center gap-1 font-mono"
+                    >
+                      Port: {activeProject.port}
+                      <ExternalLink className="w-2.5 h-2.5" />
+                    </a>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <Button
+              onClick={handleTriggerDeployment}
+              isLoading={isTriggering}
+              variant="primary"
+              size="md"
+              leftIcon={<Rocket className="w-4 h-4" />}
+            >
+              Deploy Now
+            </Button>
           </div>
         </div>
-
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <button
-            onClick={handleTriggerDeployment}
-            disabled={isTriggering}
-            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md transition-all cursor-pointer disabled:opacity-50"
-          >
-            {isTriggering ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Enqueuing Build...</span>
-              </>
-            ) : (
-              <>
-                <Rocket className="w-4 h-4" />
-                <span>Deploy Now</span>
-              </>
-            )}
-          </button>
-        </div>
-      </div>
+      </Card>
 
       {/* Main Deployment Console */}
       {isLoadingDeployments ? (
-        <div className="py-16 text-center text-slate-400 text-xs space-y-2">
-          <Loader2 className="w-6 h-6 animate-spin text-blue-400 mx-auto" />
-          <span>Loading project deployments...</span>
-        </div>
+        <Card className="p-12 text-center space-y-3">
+          <Loader2 className="w-7 h-7 animate-spin text-[#8B5CF6] mx-auto" />
+          <p className="text-xs text-slate-400 font-mono">Loading deployment pipeline...</p>
+        </Card>
       ) : deployments.length === 0 ? (
-        <div className="rounded-xl bg-slate-900 border border-slate-800 p-12 text-center space-y-4">
-          <div className="w-12 h-12 rounded-xl bg-slate-800 flex items-center justify-center mx-auto text-slate-400">
-            <History className="w-6 h-6" />
+        <Card className="p-12 text-center space-y-4">
+          <div className="w-14 h-14 rounded-2xl bg-[#171E34] border border-[#252D46] flex items-center justify-center mx-auto text-[#A78BFA] shadow-lg shadow-[#8B5CF6]/5">
+            <History className="w-7 h-7" />
           </div>
           <div>
-            <h3 className="text-base font-semibold text-slate-200">No Deployments Yet</h3>
+            <h3 className="text-base font-semibold text-white">No Deployments Executed</h3>
             <p className="text-xs text-slate-400 max-w-sm mx-auto mt-1">
-              Click &quot;Deploy Now&quot; to build and containerize branch <span className="text-blue-400 font-mono">{activeProject.deploymentBranch || 'main'}</span> with Docker.
+              Trigger your first deployment to build and containerize branch <span className="text-[#A78BFA] font-mono">{activeProject.deploymentBranch || 'main'}</span> with the Docker engine.
             </p>
           </div>
-          <button
+          <Button
             onClick={handleTriggerDeployment}
-            disabled={isTriggering}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md transition-all cursor-pointer"
+            isLoading={isTriggering}
+            variant="primary"
+            size="md"
+            leftIcon={<Rocket className="w-4 h-4" />}
           >
-            <Rocket className="w-4 h-4" />
-            <span>Deploy Now</span>
-          </button>
-        </div>
+            Deploy Now
+          </Button>
+        </Card>
       ) : (
         <div className="space-y-6">
           {/* Deployment Lifecycle Card */}
           {selectedDeployment && (
-            <div className="rounded-xl bg-slate-900 border border-slate-800 p-5 shadow-sm space-y-5">
-              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 pb-4 border-b border-slate-800">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-300">
+            <Card className="p-5 space-y-5 relative overflow-hidden">
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-4 border-b border-[#252D46]">
+                <div className="space-y-1.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-[#080B14] border border-[#252D46] text-[#A78BFA]">
                       DEP-{selectedDeployment.id.substring(0, 8)}
                     </span>
-                    <h2 className="text-base font-bold text-slate-100">Deployment Lifecycle</h2>
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                    <h2 className="text-base font-bold text-white">Deployment Pipeline</h2>
+                    <Badge
+                      variant={
                         selectedDeployment.status === 'SUCCESS'
-                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                          ? 'success'
                           : selectedDeployment.status === 'FAILED'
-                          ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                          ? 'danger'
                           : selectedDeployment.status === 'CANCELLED'
-                          ? 'bg-slate-800 text-slate-400 border-slate-700'
-                          : 'bg-blue-500/10 text-blue-400 border-blue-500/20 animate-pulse'
-                      }`}
+                          ? 'neutral'
+                          : 'purple'
+                      }
+                      dot={!['SUCCESS', 'FAILED', 'CANCELLED'].includes(selectedDeployment.status)}
                     >
                       {selectedDeployment.status}
-                    </span>
+                    </Badge>
                   </div>
-                  <p className="text-xs text-slate-400 font-mono">
-                    Trigger: <span className="text-slate-200 font-semibold">{selectedDeployment.trigger}</span> • Branch:{' '}
-                    <span className="text-slate-200 font-semibold">{selectedDeployment.commitBranch || selectedDeployment.branch || 'main'}</span>
+
+                  <p className="text-xs text-slate-400 font-mono flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span>
+                      Trigger: <span className="text-slate-200 font-semibold">{selectedDeployment.trigger}</span>
+                    </span>
+                    <span className="text-slate-600">•</span>
+                    <span>
+                      Branch: <span className="text-slate-200 font-semibold">{selectedDeployment.commitBranch || selectedDeployment.branch || 'main'}</span>
+                    </span>
                     {selectedDeployment.commitSha && (
-                      <> • Commit: <span className="text-slate-200">{selectedDeployment.commitSha.substring(0, 7)}</span></>
+                      <>
+                        <span className="text-slate-600">•</span>
+                        <span>
+                          Commit: <span className="text-slate-200">{selectedDeployment.commitSha.substring(0, 7)}</span>
+                        </span>
+                      </>
                     )}
                     {selectedDeployment.durationSeconds && (
-                      <> • Duration: <span className="text-emerald-400 font-bold">{selectedDeployment.durationSeconds}s</span></>
+                      <>
+                        <span className="text-slate-600">•</span>
+                        <span>
+                          Duration: <span className="text-[#10B981] font-bold">{selectedDeployment.durationSeconds}s</span>
+                        </span>
+                      </>
                     )}
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   {!['SUCCESS', 'FAILED', 'CANCELLED'].includes(selectedDeployment.status) ? (
-                    <button
+                    <Button
                       onClick={handleCancelDeployment}
-                      disabled={isCancelling}
-                      className="px-3 py-1.5 text-xs font-medium rounded-md border border-rose-500/30 text-rose-400 hover:bg-rose-500/10 transition-colors flex items-center gap-1.5 cursor-pointer"
+                      isLoading={isCancelling}
+                      variant="danger"
+                      size="sm"
+                      leftIcon={<XCircle className="w-3.5 h-3.5" />}
                     >
-                      <XCircle className="w-3.5 h-3.5" />
-                      <span>{isCancelling ? 'Cancelling...' : 'Cancel Deployment'}</span>
-                    </button>
+                      Cancel Deployment
+                    </Button>
                   ) : (
-                    <button
+                    <Button
                       onClick={handleRetryDeployment}
-                      className="px-3 py-1.5 text-xs font-medium rounded-md bg-blue-600 hover:bg-blue-500 text-white shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+                      variant="primary"
+                      size="sm"
+                      leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
                     >
-                      <RefreshCw className="w-3.5 h-3.5" />
-                      <span>Re-deploy</span>
-                    </button>
+                      Re-deploy
+                    </Button>
                   )}
 
                   <a
                     href={deploymentsApi.getDownloadLogsUrl(selectedDeployment.id)}
                     target="_blank"
                     rel="noreferrer"
-                    className="px-3 py-1.5 text-xs font-medium rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors flex items-center gap-1.5"
                   >
-                    <Download className="w-3.5 h-3.5" />
-                    <span>Download Raw Log</span>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      leftIcon={<Download className="w-3.5 h-3.5" />}
+                    >
+                      Raw Logs
+                    </Button>
                   </a>
                 </div>
               </div>
 
               {/* 6-Stage Stepper */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 pt-1 text-xs">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 pt-1 text-xs">
                 {STAGES.map((s, idx) => {
                   const isCompleted = currentStageIndex > idx || selectedDeployment.status === 'SUCCESS';
                   const isCurrent = currentStageIndex === idx && !['SUCCESS', 'FAILED', 'CANCELLED'].includes(selectedDeployment.status);
                   const isFailed = selectedDeployment.status === 'FAILED' && currentStageIndex === idx;
 
-                  let borderClass = 'border-slate-800 bg-slate-950/40 text-slate-500';
+                  let borderClass = 'border-[#252D46] bg-[#080B14]/60 text-slate-500';
                   let icon = <Clock className="w-3.5 h-3.5 text-slate-600" />;
 
                   if (isCompleted) {
-                    borderClass = 'border-emerald-500/30 bg-emerald-500/5 text-emerald-400';
-                    icon = <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />;
+                    borderClass = 'border-[#10B981]/40 bg-[#10B981]/10 text-[#10B981] shadow-[0_0_12px_rgba(16,185,129,0.15)]';
+                    icon = <CheckCircle2 className="w-3.5 h-3.5 text-[#10B981]" />;
                   } else if (isCurrent) {
-                    borderClass = 'border-blue-500/40 bg-blue-500/10 text-blue-300 shadow-sm shadow-blue-500/10';
-                    icon = <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />;
+                    borderClass = 'border-[#8B5CF6]/50 bg-[#8B5CF6]/15 text-[#A78BFA] shadow-[0_0_15px_rgba(139,92,246,0.25)] animate-pulse';
+                    icon = <Loader2 className="w-3.5 h-3.5 animate-spin text-[#A78BFA]" />;
                   } else if (isFailed) {
-                    borderClass = 'border-rose-500/40 bg-rose-500/10 text-rose-400';
+                    borderClass = 'border-rose-500/50 bg-rose-500/15 text-rose-400 shadow-[0_0_12px_rgba(244,63,94,0.15)]';
                     icon = <AlertCircle className="w-3.5 h-3.5 text-rose-400" />;
                   }
 
                   return (
                     <div
                       key={s.key}
-                      className={`flex flex-col p-2.5 rounded-lg border transition-all ${borderClass}`}
+                      className={`flex flex-col p-3 rounded-xl border transition-all duration-200 ${borderClass}`}
                     >
-                      <span className="text-[10px] font-semibold flex items-center gap-1.5">
+                      <span className="text-[10px] font-semibold flex items-center gap-1.5 font-mono">
                         {icon}
                         <span>{s.label}</span>
                       </span>
@@ -414,78 +471,111 @@ export const DeploymentsPage: React.FC = () => {
                   );
                 })}
               </div>
-            </div>
+            </Card>
           )}
 
-          {/* Terminal Log Stream */}
-          <div className="rounded-xl border border-slate-800 bg-[#0d1117] text-slate-200 overflow-hidden shadow-xl flex flex-col">
-            <div className="px-4 py-2.5 bg-[#161b22] border-b border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
-              <div className="flex items-center gap-2">
+          {/* Terminal Log Stream Window */}
+          <div className="rounded-2xl border border-[#252D46] bg-[#06080F] text-slate-200 overflow-hidden shadow-2xl flex flex-col">
+            {/* Terminal Top Titlebar */}
+            <div className="px-4 py-3 bg-[#0D1120] border-b border-[#252D46] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-rose-500/80"></span>
-                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80"></span>
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80"></span>
+                  <span className="w-3 h-3 rounded-full bg-rose-500/80 border border-rose-500/40"></span>
+                  <span className="w-3 h-3 rounded-full bg-amber-500/80 border border-amber-500/40"></span>
+                  <span className="w-3 h-3 rounded-full bg-emerald-500/80 border border-emerald-500/40"></span>
                 </div>
-                <span className="font-mono text-slate-400 text-[11px] ml-2">
-                  shipit-worker@node0: ~/deployments/{selectedDeployment?.id.substring(0, 8)}.log
-                </span>
-                <span
-                  className={`text-[10px] px-2 py-0.5 rounded font-mono border ${
+                <div className="flex items-center gap-2 font-mono text-slate-400 text-[11px]">
+                  <TerminalIcon className="w-3.5 h-3.5 text-[#8B5CF6]" />
+                  <span>shipit-worker@node0: ~/deployments/{selectedDeployment?.id.substring(0, 8)}.log</span>
+                </div>
+                <Badge
+                  variant={
                     sseState === 'CONNECTED'
-                      ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30 animate-pulse'
+                      ? 'success'
                       : sseState === 'CONNECTING'
-                      ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                      ? 'warning'
                       : sseState === 'COMPLETED'
-                      ? 'bg-blue-500/20 text-blue-400 border-blue-500/30'
-                      : 'bg-slate-800 text-slate-400 border-slate-700'
-                  }`}
+                      ? 'blue'
+                      : 'neutral'
+                  }
+                  dot={sseState === 'CONNECTED'}
                 >
                   SSE: {sseState}
-                </span>
+                </Badge>
               </div>
 
               <div className="flex items-center gap-2 w-full sm:w-auto">
+                {/* Search in logs */}
                 <div className="relative flex-1 sm:flex-initial">
-                  <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2" />
+                  <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
                     placeholder="Search logs..."
                     value={filterQuery}
                     onChange={(e) => setFilterQuery(e.target.value)}
-                    className="w-full sm:w-44 text-[11px] font-mono pl-8 pr-2.5 py-1 rounded bg-slate-900 border border-slate-700 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-blue-500"
+                    className="w-full sm:w-44 text-[11px] font-mono pl-8 pr-2.5 py-1.5 rounded-lg bg-[#080B14] border border-[#252D46] text-slate-200 placeholder-slate-600 focus:outline-none focus:border-[#8B5CF6]"
                   />
+                  {filterQuery && (
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-mono">
+                      {filteredLogs.length}
+                    </span>
+                  )}
                 </div>
 
+                {/* Auto-scroll Button */}
                 <button
                   onClick={() => setAutoScroll(!autoScroll)}
-                  className={`px-2.5 py-1 rounded text-[11px] font-mono border transition-colors flex items-center gap-1 cursor-pointer ${
+                  className={`px-2.5 py-1.5 rounded-lg text-[11px] font-mono border transition-colors flex items-center gap-1.5 cursor-pointer ${
                     autoScroll
-                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                      : 'bg-slate-800 border-slate-700 text-slate-400'
+                      ? 'bg-[#10B981]/10 border-[#10B981]/30 text-[#10B981]'
+                      : 'bg-[#111629] border-[#252D46] text-slate-400 hover:text-slate-200'
                   }`}
                   title="Auto-scroll to latest log line"
                 >
                   <ArrowDownCircle className="w-3.5 h-3.5" />
-                  <span>Auto-scroll</span>
+                  <span>Scroll</span>
+                </button>
+
+                {/* Copy logs */}
+                <button
+                  onClick={handleCopyLogs}
+                  className="px-2.5 py-1.5 rounded-lg text-[11px] font-mono border bg-[#111629] border-[#252D46] text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1.5 cursor-pointer"
+                  title="Copy terminal logs"
+                >
+                  {copiedLogs ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-[#10B981]" />
+                      <span className="text-[#10B981]">Copied</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Copy</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>
 
-            <div className="p-4 font-mono text-[11px] leading-relaxed overflow-y-auto max-h-[550px] space-y-1 select-text">
+            {/* Terminal Body */}
+            <div className="p-4 font-mono text-[12px] leading-relaxed overflow-y-auto max-h-[550px] space-y-1 select-text scrollbar-thin scrollbar-thumb-slate-800 terminal-scanlines">
               {filteredLogs.length === 0 ? (
-                <div className="py-8 text-center text-slate-500 font-mono text-xs">
-                  {selectedDeployment?.status === 'QUEUED'
-                    ? 'Deployment is enqueued. Waiting for worker to acquire via PostgreSQL SKIP LOCKED...'
-                    : 'No log output recorded yet for this deployment.'}
+                <div className="py-12 text-center text-slate-500 font-mono text-xs space-y-2">
+                  <TerminalIcon className="w-6 h-6 mx-auto text-slate-600 opacity-60" />
+                  <p>
+                    {selectedDeployment?.status === 'QUEUED'
+                      ? 'Deployment is enqueued. Waiting for worker to acquire via PostgreSQL SKIP LOCKED...'
+                      : 'No log output recorded yet for this deployment.'}
+                  </p>
                 </div>
               ) : (
                 filteredLogs.map((log, i) => (
-                  <div key={i} className="flex gap-2.5 hover:bg-slate-800/20 px-1 rounded transition-colors">
-                    <span className="text-slate-600 select-none shrink-0 font-mono text-[10px]">
+                  <div key={i} className="flex gap-2.5 hover:bg-[#111629]/60 px-1.5 py-0.5 rounded transition-colors group">
+                    <span className="text-slate-600 select-none shrink-0 font-mono text-[10px] w-14 group-hover:text-slate-400 transition-colors">
                       {log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : `#${log.sequenceNumber}`}
                     </span>
                     <span
-                      className={`font-semibold shrink-0 ${
+                      className={`font-semibold shrink-0 text-[11px] ${
                         log.stage === 'BUILDING'
                           ? 'text-amber-400'
                           : log.stage === 'DETECTING'
@@ -493,9 +583,9 @@ export const DeploymentsPage: React.FC = () => {
                           : log.stage === 'STARTING'
                           ? 'text-indigo-400'
                           : log.stage === 'HEALTH_CHECKING'
-                          ? 'text-purple-400'
+                          ? 'text-[#A78BFA]'
                           : log.stage === 'SUCCESS'
-                          ? 'text-emerald-400'
+                          ? 'text-[#10B981]'
                           : log.stage === 'FAILED'
                           ? 'text-rose-400'
                           : 'text-slate-400'
@@ -503,7 +593,7 @@ export const DeploymentsPage: React.FC = () => {
                     >
                       [{log.stage}]
                     </span>
-                    <span className="text-slate-300 break-all whitespace-pre-wrap">{log.message}</span>
+                    <span className="text-slate-300 break-all whitespace-pre-wrap font-mono flex-1">{log.message}</span>
                   </div>
                 ))
               )}
@@ -513,49 +603,58 @@ export const DeploymentsPage: React.FC = () => {
 
           {/* Past Deployments History Shelf */}
           {deployments.length > 1 && (
-            <div className="rounded-xl bg-slate-900 border border-slate-800 p-4 shadow-sm space-y-3">
-              <div className="flex items-center gap-2 text-xs font-semibold text-slate-300">
-                <History className="w-4 h-4 text-slate-400" />
-                <span>Deployment History ({deployments.length} runs)</span>
+            <Card className="p-4 space-y-3">
+              <div className="flex items-center justify-between text-xs font-semibold text-slate-300">
+                <div className="flex items-center gap-2">
+                  <History className="w-4 h-4 text-[#8B5CF6]" />
+                  <span>Deployment History ({deployments.length} runs)</span>
+                </div>
+                <span className="text-slate-500 font-mono text-[11px]">Click to inspect logs</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5">
-                {deployments.map((d) => (
-                  <button
-                    key={d.id}
-                    onClick={() => setSelectedDeployment(d)}
-                    className={`p-3 rounded-lg border text-left transition-all cursor-pointer ${
-                      selectedDeployment?.id === d.id
-                        ? 'bg-blue-600/10 border-blue-500/40 shadow-sm'
-                        : 'bg-slate-950 border-slate-800/80 hover:border-slate-700'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-mono text-xs font-bold text-slate-200">
-                        DEP-{d.id.substring(0, 8)}
+                {deployments.map((d) => {
+                  const isSelected = selectedDeployment?.id === d.id;
+                  return (
+                    <button
+                      key={d.id}
+                      onClick={() => setSelectedDeployment(d)}
+                      className={`p-3 rounded-xl border text-left transition-all duration-200 cursor-pointer ${
+                        isSelected
+                          ? 'bg-[#8B5CF6]/15 border-[#8B5CF6]/50 shadow-[0_0_15px_rgba(139,92,246,0.15)] ring-1 ring-[#8B5CF6]/30'
+                          : 'bg-[#080B14] border-[#252D46] hover:border-slate-600 hover:bg-[#111629]'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="font-mono text-xs font-bold text-white">
+                          DEP-{d.id.substring(0, 8)}
+                        </span>
+                        <Badge
+                          variant={
+                            d.status === 'SUCCESS'
+                              ? 'success'
+                              : d.status === 'FAILED'
+                              ? 'danger'
+                              : d.status === 'CANCELLED'
+                              ? 'neutral'
+                              : 'blue'
+                          }
+                          size="xs"
+                        >
+                          {d.status}
+                        </Badge>
+                      </div>
+                      <p className="text-[11px] text-slate-400 font-mono truncate">
+                        {d.commitBranch || d.branch || 'main'}
+                        {d.commitSha ? ` • ${d.commitSha.substring(0, 7)}` : ''}
+                      </p>
+                      <span className="text-[10px] text-slate-500 font-mono mt-1 block">
+                        {d.createdAt ? new Date(d.createdAt).toLocaleString() : ''}
                       </span>
-                      <span
-                        className={`text-[9px] px-1.5 py-0.2 rounded font-semibold border ${
-                          d.status === 'SUCCESS'
-                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                            : d.status === 'FAILED'
-                            ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
-                            : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                        }`}
-                      >
-                        {d.status}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-400 font-mono mt-1 truncate">
-                      {d.commitBranch || d.branch || 'main'}
-                      {d.commitSha ? ` • ${d.commitSha.substring(0, 7)}` : ''}
-                    </p>
-                    <span className="text-[10px] text-slate-500 font-mono mt-0.5 block">
-                      {d.createdAt ? new Date(d.createdAt).toLocaleString() : ''}
-                    </span>
-                  </button>
-                ))}
+                    </button>
+                  );
+                })}
               </div>
-            </div>
+            </Card>
           )}
         </div>
       )}
