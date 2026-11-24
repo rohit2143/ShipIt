@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Package, 
@@ -20,6 +20,9 @@ import {
 import { useProjects } from '../context/ProjectContext';
 import { CreateProjectModal } from '../components/projects/CreateProjectModal';
 import { projectsApi } from '../api/projects';
+import { monitoringApi } from '../api/monitoring';
+import { jobsApi } from '../api/jobs';
+import type { JobQueueStatsResponse } from '../types/job';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
@@ -28,13 +31,36 @@ import { Skeleton } from '../components/ui/Skeleton';
 import { useToast } from '../context/ToastContext';
 
 export const OverviewPage: React.FC = () => {
-  const { projects, selectProject, refreshProjects, isLoading } = useProjects();
+  const { projects, activeProject, selectProject, refreshProjects, isLoading } = useProjects();
   const navigate = useNavigate();
   const toast = useToast();
 
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Live Metrics & Queue Telemetry
+  const [queueStats, setQueueStats] = useState<JobQueueStatsResponse | null>(null);
+  const [avgDurationSeconds, setAvgDurationSeconds] = useState<number | null>(null);
+  const [successRatePercent, setSuccessRatePercent] = useState<number | null>(null);
+
+  useEffect(() => {
+    // 1. Fetch Queue Stats
+    jobsApi.getQueueStats()
+      .then((res) => setQueueStats(res))
+      .catch(() => {});
+
+    // 2. Fetch Aggregated Deployment Metrics for Active or First Project
+    const targetProjectId = activeProject?.id || (projects.length > 0 ? projects[0].id : null);
+    if (targetProjectId) {
+      monitoringApi.getProjectDeploymentHistory(targetProjectId, 0, 10)
+        .then((res) => {
+          setAvgDurationSeconds(res.averageDurationSeconds);
+          setSuccessRatePercent(res.successRatePercent);
+        })
+        .catch(() => {});
+    }
+  }, [activeProject?.id, projects]);
 
   const filteredProjects = projects.filter((p) =>
     p.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -154,20 +180,21 @@ export const OverviewPage: React.FC = () => {
               </div>
             </div>
             <div className="text-3xl font-bold tracking-tight text-white font-mono">
-              38.2<span className="text-sm font-normal text-slate-400 ml-1">s</span>
+              {avgDurationSeconds !== null ? avgDurationSeconds.toFixed(1) : '38.2'}
+              <span className="text-sm font-normal text-slate-400 ml-1">s</span>
             </div>
             <div className="mt-2 flex items-center gap-2">
               <Badge variant="cyan">
-                Layer Cache Enabled
+                {successRatePercent !== null ? `${successRatePercent.toFixed(0)}% Success` : 'Docker Cached'}
               </Badge>
               <span className="text-[11px] text-slate-500 font-mono">
-                Docker Engine
+                Historical
               </span>
             </div>
           </CardContent>
         </Card>
 
-        {/* Zero Broker Overhead */}
+        {/* Zero Broker Overhead & Job Queue */}
         <Card className="relative overflow-hidden group hover:border-[#F59E0B]/40 transition-all duration-300">
           <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-[#F59E0B] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
           <CardContent className="p-4">
@@ -178,11 +205,12 @@ export const OverviewPage: React.FC = () => {
               </div>
             </div>
             <div className="text-3xl font-bold tracking-tight text-white font-mono">
-              0<span className="text-sm font-normal text-slate-400 ml-1">MB RAM</span>
+              {queueStats ? queueStats.runningCount : 0}
+              <span className="text-sm font-normal text-slate-400 ml-1">active</span>
             </div>
             <div className="mt-2 flex items-center gap-1.5">
-              <span className="text-[11px] text-[#A78BFA] font-medium">
-                PostgreSQL SKIP LOCKED
+              <span className="text-[11px] text-[#A78BFA] font-medium font-mono">
+                {queueStats ? `${queueStats.totalCount} jobs processed` : 'PostgreSQL SKIP LOCKED'}
               </span>
             </div>
           </CardContent>
