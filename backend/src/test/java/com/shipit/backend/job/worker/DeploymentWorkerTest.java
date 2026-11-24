@@ -1,5 +1,6 @@
 package com.shipit.backend.job.worker;
 
+import com.shipit.backend.build.exception.BuildException;
 import com.shipit.backend.job.config.DeploymentWorkerProperties;
 import com.shipit.backend.job.entity.DeploymentJob;
 import com.shipit.backend.job.entity.JobStatus;
@@ -114,7 +115,7 @@ class DeploymentWorkerTest {
     }
 
     @Test
-    @DisplayName("pollAndExecute - Calls failJob when task handler throws exception")
+    @DisplayName("pollAndExecute - Calls failJob with canRetry=true when task handler throws transient Docker daemon error")
     void pollAndExecute_HandlerFails_CallsFailJob() {
         UUID jobId = UUID.randomUUID();
         DeploymentJob job = DeploymentJob.builder().id(jobId).status(JobStatus.RUNNING).build();
@@ -128,6 +129,77 @@ class DeploymentWorkerTest {
         verify(taskHandler).handleDeployment(job);
         verify(jobService, never()).completeJob(jobId);
         verify(jobService).failJob(jobId, "Docker daemon not running", true);
+    }
+
+    @Test
+    @DisplayName("pollAndExecute - Calls failJob with canRetry=false on deterministic UNSUPPORTED_PROJECT_TYPE")
+    void pollAndExecute_DeterministicBuildException_DoesNotRetry() {
+        UUID jobId = UUID.randomUUID();
+        DeploymentJob job = DeploymentJob.builder().id(jobId).status(JobStatus.RUNNING).build();
+
+        when(jobService.claimNextJob(worker.getWorkerId())).thenReturn(Optional.of(job));
+        doThrow(new BuildException("Unsupported project layout: no pom.xml or Dockerfile", "UNSUPPORTED_PROJECT_TYPE"))
+                .when(taskHandler).handleDeployment(job);
+        when(jobService.getJobEntity(jobId)).thenReturn(job);
+
+        worker.pollAndExecute();
+
+        verify(taskHandler).handleDeployment(job);
+        verify(jobService, never()).completeJob(jobId);
+        verify(jobService).failJob(eq(jobId), anyString(), eq(false));
+    }
+
+    @Test
+    @DisplayName("pollAndExecute - Calls failJob with canRetry=false on standard Docker compilation exit code")
+    void pollAndExecute_DockerCompileFailure_DoesNotRetry() {
+        UUID jobId = UUID.randomUUID();
+        DeploymentJob job = DeploymentJob.builder().id(jobId).status(JobStatus.RUNNING).build();
+
+        when(jobService.claimNextJob(worker.getWorkerId())).thenReturn(Optional.of(job));
+        doThrow(new BuildException("Docker image build failed with exit code 1", "DOCKER_BUILD_FAILED"))
+                .when(taskHandler).handleDeployment(job);
+        when(jobService.getJobEntity(jobId)).thenReturn(job);
+
+        worker.pollAndExecute();
+
+        verify(taskHandler).handleDeployment(job);
+        verify(jobService, never()).completeJob(jobId);
+        verify(jobService).failJob(eq(jobId), anyString(), eq(false));
+    }
+
+    @Test
+    @DisplayName("pollAndExecute - Calls failJob with canRetry=true on Docker daemon socket connection error")
+    void pollAndExecute_DockerDaemonDown_Retries() {
+        UUID jobId = UUID.randomUUID();
+        DeploymentJob job = DeploymentJob.builder().id(jobId).status(JobStatus.RUNNING).build();
+
+        when(jobService.claimNextJob(worker.getWorkerId())).thenReturn(Optional.of(job));
+        doThrow(new BuildException("Cannot connect to the Docker daemon at unix:///var/run/docker.sock", "DOCKER_BUILD_FAILED"))
+                .when(taskHandler).handleDeployment(job);
+        when(jobService.getJobEntity(jobId)).thenReturn(job);
+
+        worker.pollAndExecute();
+
+        verify(taskHandler).handleDeployment(job);
+        verify(jobService, never()).completeJob(jobId);
+        verify(jobService).failJob(eq(jobId), anyString(), eq(true));
+    }
+
+    @Test
+    @DisplayName("pollAndExecute - Calls failJob with canRetry=false on unknown unclassified exception")
+    void pollAndExecute_UnknownException_DoesNotRetry() {
+        UUID jobId = UUID.randomUUID();
+        DeploymentJob job = DeploymentJob.builder().id(jobId).status(JobStatus.RUNNING).build();
+
+        when(jobService.claimNextJob(worker.getWorkerId())).thenReturn(Optional.of(job));
+        doThrow(new RuntimeException("Unexpected arbitrary bug")).when(taskHandler).handleDeployment(job);
+        when(jobService.getJobEntity(jobId)).thenReturn(job);
+
+        worker.pollAndExecute();
+
+        verify(taskHandler).handleDeployment(job);
+        verify(jobService, never()).completeJob(jobId);
+        verify(jobService).failJob(eq(jobId), anyString(), eq(false));
     }
 
     @Test

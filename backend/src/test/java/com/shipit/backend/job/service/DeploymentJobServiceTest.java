@@ -4,12 +4,15 @@ import com.shipit.backend.common.exception.BadRequestException;
 import com.shipit.backend.common.exception.ConflictException;
 import com.shipit.backend.common.exception.ResourceNotFoundException;
 import com.shipit.backend.deployment.entity.Deployment;
+import com.shipit.backend.deployment.entity.DeploymentStatus;
+import com.shipit.backend.deployment.repository.DeploymentRepository;
 import com.shipit.backend.job.dto.JobQueueStatsResponse;
 import com.shipit.backend.job.dto.JobResponse;
 import com.shipit.backend.job.entity.DeploymentJob;
 import com.shipit.backend.job.entity.JobStatus;
 import com.shipit.backend.job.entity.JobType;
 import com.shipit.backend.job.repository.DeploymentJobRepository;
+import com.shipit.backend.log.service.DeploymentLogService;
 import com.shipit.backend.project.entity.Project;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -34,6 +37,12 @@ class DeploymentJobServiceTest {
 
     @Mock
     private DeploymentJobRepository jobRepository;
+
+    @Mock
+    private DeploymentRepository deploymentRepository;
+
+    @Mock
+    private DeploymentLogService deploymentLogService;
 
     @InjectMocks
     private DeploymentJobService jobService;
@@ -217,6 +226,38 @@ class DeploymentJobServiceTest {
         assertThat(result.getClaimedBy()).isNull();
         assertThat(result.getErrorMessage()).isEqualTo("Docker daemon timeout");
         verify(jobRepository).save(runningJob);
+    }
+
+    @Test
+    @DisplayName("failJob resets associated FAILED deployment back to QUEUED and logs audit entry")
+    void testFailJobSchedulesRetry_ResetsDeploymentToQueuedAndLogs() {
+        sampleDeployment.setStatus(DeploymentStatus.FAILED);
+        sampleDeployment.setFinishedAt(Instant.now());
+
+        DeploymentJob runningJob = DeploymentJob.builder()
+                .id(jobId)
+                .deployment(sampleDeployment)
+                .status(JobStatus.RUNNING)
+                .retryCount(0)
+                .maxRetries(3)
+                .claimedBy("worker-1")
+                .build();
+
+        when(jobRepository.findById(jobId)).thenReturn(Optional.of(runningJob));
+        when(jobRepository.save(any(DeploymentJob.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(deploymentRepository.findById(deploymentId)).thenReturn(Optional.of(sampleDeployment));
+        when(deploymentRepository.save(any(Deployment.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        DeploymentJob result = jobService.failJob(jobId, "Transient network timeout", true);
+
+        assertThat(result.getStatus()).isEqualTo(JobStatus.PENDING);
+        assertThat(result.getRetryCount()).isEqualTo(1);
+        assertThat(sampleDeployment.getStatus()).isEqualTo(DeploymentStatus.QUEUED);
+        assertThat(sampleDeployment.getFinishedAt()).isNull();
+
+        verify(deploymentRepository).save(sampleDeployment);
+        verify(deploymentLogService).appendLog(eq(deploymentId), any(), any(), contains("retry attempt 1/3"), any());
+        verify(deploymentLogService).recordStatusChange(eq(deploymentId), eq(DeploymentStatus.QUEUED), contains("retry attempt 1/3"));
     }
 
     @Test

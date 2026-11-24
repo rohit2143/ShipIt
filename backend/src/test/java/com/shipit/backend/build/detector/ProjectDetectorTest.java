@@ -153,6 +153,53 @@ class ProjectDetectorTest {
     }
 
     @Test
+    @DisplayName("detect resolves rootDirectory configured as 'backend'")
+    void testDetect_ConfiguredRootDirectory_Backend() throws IOException {
+        Path backendDir = tempDir.resolve("backend");
+        Files.createDirectories(backendDir);
+        Files.writeString(backendDir.resolve("pom.xml"), "<project></project>");
+
+        project.setRootDirectory("backend");
+
+        BuildPlan plan = detector.detect(tempDir, deployment, logBuffer);
+
+        assertThat(plan.getProjectType()).isEqualTo(ProjectType.MAVEN_SPRING_BOOT);
+        assertThat(plan.getRootDirectory()).isEqualTo("backend");
+        assertThat(plan.getDockerfilePath()).isEqualTo(backendDir.resolve("Dockerfile.shipit").toAbsolutePath().toString());
+    }
+
+    @Test
+    @DisplayName("detect resolves rootDirectory with leading and trailing slashes")
+    void testDetect_ConfiguredRootDirectory_SlashesAndWhitespace() throws IOException {
+        Path backendDir = tempDir.resolve("backend");
+        Files.createDirectories(backendDir);
+        Files.writeString(backendDir.resolve("pom.xml"), "<project></project>");
+
+        project.setRootDirectory("  /backend/  ");
+
+        BuildPlan plan = detector.detect(tempDir, deployment, logBuffer);
+
+        assertThat(plan.getProjectType()).isEqualTo(ProjectType.MAVEN_SPRING_BOOT);
+        assertThat(plan.getDockerfilePath()).isEqualTo(backendDir.resolve("Dockerfile.shipit").toAbsolutePath().toString());
+    }
+
+    @Test
+    @DisplayName("detect resolves rootDirectory pointing to custom Dockerfile")
+    void testDetect_ConfiguredRootDirectory_CustomDockerfile() throws IOException {
+        Path backendDir = tempDir.resolve("backend");
+        Files.createDirectories(backendDir);
+        Files.writeString(backendDir.resolve("Dockerfile"), "FROM openjdk:21\nEXPOSE 8080\n");
+
+        project.setRootDirectory("backend");
+
+        BuildPlan plan = detector.detect(tempDir, deployment, logBuffer);
+
+        assertThat(plan.getProjectType()).isEqualTo(ProjectType.DOCKERFILE_CUSTOM);
+        assertThat(plan.isCustomDockerfile()).isTrue();
+        assertThat(plan.getDockerfilePath()).isEqualTo(backendDir.resolve("Dockerfile").toAbsolutePath().toString());
+    }
+
+    @Test
     @DisplayName("detect throws BuildException on path traversal attempt in rootDirectory")
     void testDetect_PathTraversal() {
         project.setRootDirectory("../../etc/passwd");

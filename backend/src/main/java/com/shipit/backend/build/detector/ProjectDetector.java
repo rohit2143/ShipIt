@@ -120,12 +120,23 @@ public class ProjectDetector {
     public Path resolveApplicationRoot(Path workspaceRoot, String configuredRootDir) {
         Path normalizedWorkspace = workspaceRoot.toAbsolutePath().normalize();
 
-        if (configuredRootDir == null || configuredRootDir.isBlank() || configuredRootDir.equals("/")) {
+        if (configuredRootDir == null || configuredRootDir.isBlank()) {
             return normalizedWorkspace;
         }
 
-        String relPath = configuredRootDir.startsWith("/") ? configuredRootDir.substring(1) : configuredRootDir;
-        Path appRoot = normalizedWorkspace.resolve(relPath).normalize();
+        String cleaned = configuredRootDir.trim();
+        while (cleaned.startsWith("/")) {
+            cleaned = cleaned.substring(1).trim();
+        }
+        while (cleaned.endsWith("/")) {
+            cleaned = cleaned.substring(0, cleaned.length() - 1).trim();
+        }
+
+        if (cleaned.isBlank() || cleaned.equals(".")) {
+            return normalizedWorkspace;
+        }
+
+        Path appRoot = normalizedWorkspace.resolve(cleaned).normalize();
 
         // Path traversal guard
         if (!appRoot.startsWith(normalizedWorkspace)) {
