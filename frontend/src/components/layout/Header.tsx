@@ -1,10 +1,12 @@
 import React from 'react';
-import { Play, Activity, Search, Menu, Command } from 'lucide-react';
+import { Play, Activity, Search, Menu, Command, PanelLeftOpen, PanelLeftClose } from 'lucide-react';
 import { useProjects } from '../../context/ProjectContext';
 import { Button } from '../ui/Button';
 
 interface HeaderProps {
   currentPageTitle: string;
+  isSidebarCollapsed?: boolean;
+  onToggleSidebarCollapse?: () => void;
   onDeployTrigger?: () => void;
   onOpenCommandPalette?: () => void;
   onMobileMenuToggle?: () => void;
@@ -12,6 +14,8 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ 
   currentPageTitle,
+  isSidebarCollapsed = false,
+  onToggleSidebarCollapse,
   onDeployTrigger,
   onOpenCommandPalette,
   onMobileMenuToggle,
@@ -31,6 +35,22 @@ export const Header: React.FC<HeaderProps> = ({
             aria-label="Open navigation menu"
           >
             <Menu className="w-4 h-4" />
+          </button>
+        )}
+
+        {onToggleSidebarCollapse && (
+          <button
+            type="button"
+            onClick={onToggleSidebarCollapse}
+            className="hidden lg:flex p-1.5 rounded-lg border border-[#252D46] text-slate-400 hover:text-slate-100 hover:bg-[#171E34] transition-colors cursor-pointer"
+            title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-label={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {isSidebarCollapsed ? (
+              <PanelLeftOpen className="w-4 h-4" />
+            ) : (
+              <PanelLeftClose className="w-4 h-4" />
+            )}
           </button>
         )}
 

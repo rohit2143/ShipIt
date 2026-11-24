@@ -72,6 +72,8 @@ export const MainLayout: React.FC = () => {
       <div className="flex-1 flex flex-col min-w-0 transition-all duration-300 relative z-10">
         <Header 
           currentPageTitle={getPageTitle(location.pathname)}
+          isSidebarCollapsed={isCollapsed}
+          onToggleSidebarCollapse={() => setIsCollapsed(!isCollapsed)}
           onDeployTrigger={() => {
             if (activeProject) {
               navigate('/deployments');

@@ -150,12 +150,31 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Top Section */}
         <div className="p-4 space-y-4 overflow-y-auto">
           {/* Brand Header */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-purple-700 via-purple-600 to-indigo-500 text-white flex items-center justify-center shadow-[0_0_20px_-3px_rgba(139,92,246,0.5)] border border-purple-400/30 shrink-0">
+          {isCollapsed ? (
+            <div className="flex flex-col items-center gap-2.5">
+              <div 
+                className="w-9 h-9 rounded-xl bg-gradient-to-tr from-purple-700 via-purple-600 to-indigo-500 text-white flex items-center justify-center shadow-[0_0_20px_-3px_rgba(139,92,246,0.5)] border border-purple-400/30 shrink-0"
+                title="ShipIt"
+              >
                 <Rocket className="w-4 h-4 text-purple-100" />
               </div>
-              {!isCollapsed && (
+              {onToggleCollapse && (
+                <button
+                  type="button"
+                  onClick={onToggleCollapse}
+                  className="hidden lg:flex p-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-[#171E34] transition-colors cursor-pointer"
+                  title="Expand sidebar"
+                >
+                  <PanelLeftOpen className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-purple-700 via-purple-600 to-indigo-500 text-white flex items-center justify-center shadow-[0_0_20px_-3px_rgba(139,92,246,0.5)] border border-purple-400/30 shrink-0">
+                  <Rocket className="w-4 h-4 text-purple-100" />
+                </div>
                 <div className="flex flex-col truncate">
                   <div className="flex items-center gap-1.5">
                     <span className="font-bold tracking-tight text-sm text-slate-100 font-mono">
@@ -169,36 +188,32 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     Autonomous Cloud
                   </span>
                 </div>
-              )}
-            </div>
+              </div>
 
-            {/* Desktop Collapse Toggle */}
-            <div className="hidden lg:flex items-center">
-              {onToggleCollapse && (
-                <button
-                  type="button"
-                  onClick={onToggleCollapse}
-                  className="p-1 rounded-md text-slate-400 hover:text-slate-200 hover:bg-[#171E34] transition-colors cursor-pointer"
-                  title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-                >
-                  {isCollapsed ? (
-                    <PanelLeftOpen className="w-4 h-4" />
-                  ) : (
+              {/* Desktop Collapse Toggle */}
+              <div className="hidden lg:flex items-center">
+                {onToggleCollapse && (
+                  <button
+                    type="button"
+                    onClick={onToggleCollapse}
+                    className="p-1 rounded-md text-slate-400 hover:text-slate-200 hover:bg-[#171E34] transition-colors cursor-pointer"
+                    title="Collapse sidebar"
+                  >
                     <PanelLeftClose className="w-4 h-4" />
-                  )}
-                </button>
-              )}
-            </div>
+                  </button>
+                )}
+              </div>
 
-            {/* Mobile Close Button */}
-            <button
-              type="button"
-              onClick={onMobileClose}
-              className="lg:hidden p-1 rounded-md text-slate-400 hover:text-slate-200 hover:bg-[#171E34] cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
+              {/* Mobile Close Button */}
+              <button
+                type="button"
+                onClick={onMobileClose}
+                className="lg:hidden p-1 rounded-md text-slate-400 hover:text-slate-200 hover:bg-[#171E34] cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
 
           {/* Active Project Selector */}
           {!isCollapsed && (
