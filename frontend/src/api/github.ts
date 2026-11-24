@@ -52,4 +52,8 @@ export const githubApi = {
     );
     return response.data.data;
   },
+
+  disconnectConnection: async (connectionId: string): Promise<void> => {
+    await apiClient.delete(`/github/connections/${connectionId}`);
+  },
 };

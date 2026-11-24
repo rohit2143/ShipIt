@@ -109,6 +109,16 @@ public class Deployment extends BaseEntity {
                 : errorMessage;
     }
 
+    public void resetForRetry() {
+        if (this.status != DeploymentStatus.FAILED) {
+            throw new IllegalStateException(
+                    String.format("Cannot reset deployment for retry from status %s; must be FAILED", this.status)
+            );
+        }
+        this.status = DeploymentStatus.QUEUED;
+        this.finishedAt = null;
+    }
+
     public void cancel() {
         transitionTo(DeploymentStatus.CANCELLED);
     }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import { 
   Rocket, 
@@ -13,10 +13,13 @@ import {
   Check,
   PanelLeftClose,
   PanelLeftOpen,
-  X
+  X,
+  Zap
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useProjects } from '../../context/ProjectContext';
+import { jobsApi } from '../../api/jobs';
+import type { JobQueueStatsResponse } from '../../types/job';
 
 interface SidebarProps {
   isCollapsed?: boolean;
@@ -47,6 +50,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const { user, logout } = useAuth();
   const { projects, activeProject, selectProject } = useProjects();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [queueStats, setQueueStats] = useState<JobQueueStatsResponse | null>(null);
+
+  useEffect(() => {
+    const fetchQueue = () => {
+      jobsApi.getQueueStats()
+        .then((res) => setQueueStats(res))
+        .catch(() => {});
+    };
+    fetchQueue();
+    const interval = setInterval(fetchQueue, 15000);
+    return () => clearInterval(interval);
+  }, []);
 
   const initials = user?.name
     ? user.name
@@ -135,12 +150,31 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Top Section */}
         <div className="p-4 space-y-4 overflow-y-auto">
           {/* Brand Header */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-purple-700 via-purple-600 to-indigo-500 text-white flex items-center justify-center shadow-[0_0_20px_-3px_rgba(139,92,246,0.5)] border border-purple-400/30 shrink-0">
+          {isCollapsed ? (
+            <div className="flex flex-col items-center gap-2.5">
+              <div 
+                className="w-9 h-9 rounded-xl bg-gradient-to-tr from-purple-700 via-purple-600 to-indigo-500 text-white flex items-center justify-center shadow-[0_0_20px_-3px_rgba(139,92,246,0.5)] border border-purple-400/30 shrink-0"
+                title="ShipIt"
+              >
                 <Rocket className="w-4 h-4 text-purple-100" />
               </div>
-              {!isCollapsed && (
+              {onToggleCollapse && (
+                <button
+                  type="button"
+                  onClick={onToggleCollapse}
+                  className="hidden lg:flex p-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-[#171E34] transition-colors cursor-pointer"
+                  title="Expand sidebar"
+                >
+                  <PanelLeftOpen className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-purple-700 via-purple-600 to-indigo-500 text-white flex items-center justify-center shadow-[0_0_20px_-3px_rgba(139,92,246,0.5)] border border-purple-400/30 shrink-0">
+                  <Rocket className="w-4 h-4 text-purple-100" />
+                </div>
                 <div className="flex flex-col truncate">
                   <div className="flex items-center gap-1.5">
                     <span className="font-bold tracking-tight text-sm text-slate-100 font-mono">
@@ -154,36 +188,32 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     Autonomous Cloud
                   </span>
                 </div>
-              )}
-            </div>
+              </div>
 
-            {/* Desktop Collapse Toggle */}
-            <div className="hidden lg:flex items-center">
-              {onToggleCollapse && (
-                <button
-                  type="button"
-                  onClick={onToggleCollapse}
-                  className="p-1 rounded-md text-slate-400 hover:text-slate-200 hover:bg-[#171E34] transition-colors cursor-pointer"
-                  title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-                >
-                  {isCollapsed ? (
-                    <PanelLeftOpen className="w-4 h-4" />
-                  ) : (
+              {/* Desktop Collapse Toggle */}
+              <div className="hidden lg:flex items-center">
+                {onToggleCollapse && (
+                  <button
+                    type="button"
+                    onClick={onToggleCollapse}
+                    className="p-1 rounded-md text-slate-400 hover:text-slate-200 hover:bg-[#171E34] transition-colors cursor-pointer"
+                    title="Collapse sidebar"
+                  >
                     <PanelLeftClose className="w-4 h-4" />
-                  )}
-                </button>
-              )}
-            </div>
+                  </button>
+                )}
+              </div>
 
-            {/* Mobile Close Button */}
-            <button
-              type="button"
-              onClick={onMobileClose}
-              className="lg:hidden p-1 rounded-md text-slate-400 hover:text-slate-200 hover:bg-[#171E34] cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
+              {/* Mobile Close Button */}
+              <button
+                type="button"
+                onClick={onMobileClose}
+                className="lg:hidden p-1 rounded-md text-slate-400 hover:text-slate-200 hover:bg-[#171E34] cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
 
           {/* Active Project Selector */}
           {!isCollapsed && (
@@ -298,22 +328,36 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div className="p-2.5 rounded-xl border border-[#252D46] bg-[#111629]/70 text-[11px] space-y-1.5">
               <div className="flex items-center justify-between text-slate-400">
                 <span className="flex items-center gap-1.5 font-medium">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(16,185,129,0.8)] animate-pulse" />
-                  <span className="font-mono text-[10px]">Worker 0</span>
+                  <span className={`w-1.5 h-1.5 rounded-full ${
+                    (queueStats?.runningCount ?? 0) > 0
+                      ? 'bg-amber-400 shadow-[0_0_6px_rgba(245,158,11,0.8)] animate-pulse'
+                      : 'bg-emerald-400 shadow-[0_0_6px_rgba(16,185,129,0.8)]'
+                  }`} />
+                  <span className="font-mono text-[10px]">Worker Pool</span>
                 </span>
-                <span className="text-[9px] font-mono text-emerald-400 font-semibold">READY</span>
+                <span className="text-[9px] font-mono text-emerald-400 font-semibold">
+                  {(queueStats?.runningCount ?? 0) > 0 ? `${queueStats?.runningCount} BUSY` : 'READY'}
+                </span>
               </div>
               <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
-                <span>Docker Engine</span>
-                <span className="flex items-center gap-1 text-slate-400">
-                  <Cpu className="w-3 h-3 text-purple-400" />
-                  Active
+                <span className="flex items-center gap-1">
+                  <Zap className="w-3 h-3 text-[#A78BFA]" />
+                  Job Queue
+                </span>
+                <span className="text-slate-300">
+                  {queueStats ? `${queueStats.pendingCount + queueStats.runningCount} in queue` : 'Active'}
                 </span>
               </div>
               <div className="w-full bg-[#080B14] h-1 rounded-full overflow-hidden border border-[#252D46]/60">
                 <div
-                  className="bg-gradient-to-r from-purple-500 to-indigo-500 h-full rounded-full"
-                  style={{ width: '28%' }}
+                  className="bg-gradient-to-r from-purple-500 to-indigo-500 h-full rounded-full transition-all duration-300"
+                  style={{
+                    width: `${
+                      queueStats && queueStats.totalCount > 0
+                        ? Math.min(100, Math.max(15, (queueStats.runningCount / queueStats.totalCount) * 100))
+                        : 25
+                    }%`
+                  }}
                 />
               </div>
             </div>

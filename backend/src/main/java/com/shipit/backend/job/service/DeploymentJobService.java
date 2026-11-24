@@ -1,15 +1,20 @@
 package com.shipit.backend.job.service;
 
+import com.shipit.backend.build.logging.LogSource;
 import com.shipit.backend.common.exception.BadRequestException;
 import com.shipit.backend.common.exception.ConflictException;
 import com.shipit.backend.common.exception.ResourceNotFoundException;
 import com.shipit.backend.deployment.entity.Deployment;
+import com.shipit.backend.deployment.entity.DeploymentStatus;
+import com.shipit.backend.deployment.repository.DeploymentRepository;
 import com.shipit.backend.job.dto.JobQueueStatsResponse;
 import com.shipit.backend.job.dto.JobResponse;
 import com.shipit.backend.job.entity.DeploymentJob;
 import com.shipit.backend.job.entity.JobStatus;
 import com.shipit.backend.job.entity.JobType;
 import com.shipit.backend.job.repository.DeploymentJobRepository;
+import com.shipit.backend.log.entity.DeploymentStage;
+import com.shipit.backend.log.service.DeploymentLogService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -27,6 +32,8 @@ public class DeploymentJobService {
     private static final Set<JobStatus> ACTIVE_STATUSES = Set.of(JobStatus.PENDING, JobStatus.RUNNING);
 
     private final DeploymentJobRepository jobRepository;
+    private final DeploymentRepository deploymentRepository;
+    private final DeploymentLogService deploymentLogService;
 
     /**
      * Enqueues a new background deployment job for the given deployment.
@@ -119,6 +126,30 @@ public class DeploymentJobService {
         if (canRetry && job.canRetry()) {
             job.scheduleRetry(errorMessage);
             DeploymentJob saved = jobRepository.save(job);
+
+            if (saved.getDeployment() != null) {
+                UUID deploymentId = saved.getDeployment().getId();
+                if (deploymentId != null) {
+                    deploymentRepository.findById(deploymentId).ifPresent(deployment -> {
+                        if (deployment.getStatus() == DeploymentStatus.FAILED) {
+                            deployment.resetForRetry();
+                            deploymentRepository.save(deployment);
+                            String retryLog = String.format("Deployment re-queued for retry attempt %d/%d: %s",
+                                    saved.getRetryCount(), saved.getMaxRetries(),
+                                    errorMessage != null ? errorMessage : "Transient failure");
+                            deploymentLogService.appendLog(
+                                    deploymentId,
+                                    DeploymentStage.SYSTEM,
+                                    LogSource.SYSTEM,
+                                    retryLog,
+                                    Collections.emptySet()
+                            );
+                            deploymentLogService.recordStatusChange(deploymentId, DeploymentStatus.QUEUED, retryLog);
+                        }
+                    });
+                }
+            }
+
             log.warn("Job {} failed with error [{}]. Scheduled retry {}/{}",
                     jobId, errorMessage, saved.getRetryCount(), saved.getMaxRetries());
             return saved;

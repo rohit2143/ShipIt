@@ -151,4 +151,51 @@ class DeploymentStatusTest {
         assertThat(buildingDep.getFinishedAt()).isNotNull();
         assertThat(buildingDep.getErrorMessage()).hasSize(1000);
     }
+
+    @Test
+    @DisplayName("resetForRetry transitions FAILED deployment back to QUEUED and clears finishedAt")
+    void resetForRetry_FromFailed_TransitionsToQueuedAndClearsFinishedAt() {
+        Deployment deployment = Deployment.builder()
+                .status(DeploymentStatus.FAILED)
+                .finishedAt(Instant.now())
+                .errorMessage("Initial failure")
+                .build();
+
+        deployment.resetForRetry();
+
+        assertThat(deployment.getStatus()).isEqualTo(DeploymentStatus.QUEUED);
+        assertThat(deployment.getFinishedAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("resetForRetry throws IllegalStateException if current status is not FAILED")
+    void resetForRetry_FromNonFailedStatus_ThrowsIllegalStateException() {
+        Deployment buildingDeployment = Deployment.builder()
+                .status(DeploymentStatus.BUILDING)
+                .build();
+
+        assertThatThrownBy(buildingDeployment::resetForRetry)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Cannot reset deployment for retry from status BUILDING; must be FAILED");
+
+        Deployment successDeployment = Deployment.builder()
+                .status(DeploymentStatus.SUCCESS)
+                .build();
+
+        assertThatThrownBy(successDeployment::resetForRetry)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Cannot reset deployment for retry from status SUCCESS; must be FAILED");
+    }
+
+    @Test
+    @DisplayName("transitionTo from FAILED directly to CLONING throws IllegalStateException (FAILED remains terminal)")
+    void transitionTo_FromFailedToCloning_ThrowsIllegalStateException() {
+        Deployment deployment = Deployment.builder()
+                .status(DeploymentStatus.FAILED)
+                .build();
+
+        assertThatThrownBy(() -> deployment.transitionTo(DeploymentStatus.CLONING))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Invalid deployment status transition from FAILED to CLONING");
+    }
 }

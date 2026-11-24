@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   ShieldCheck, 
@@ -15,10 +15,14 @@ import {
   Eye, 
   EyeOff,
   Boxes,
-  Loader2
+  Loader2,
+  ExternalLink,
+  Plus
 } from 'lucide-react';
 import { useProjects } from '../context/ProjectContext';
 import { projectsApi } from '../api/projects';
+import { githubApi } from '../api/github';
+import type { GitHubConnection } from '../types/github';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
@@ -33,8 +37,40 @@ export const SettingsPage: React.FC = () => {
   const [copiedWebhook, setCopiedWebhook] = useState(false);
   const [copiedSecret, setCopiedSecret] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
+  
+  // Project settings form state
   const [autoDeployEnabled, setAutoDeployEnabled] = useState(activeProject?.autoDeploy ?? true);
+  const [deploymentBranch, setDeploymentBranch] = useState(activeProject?.deploymentBranch || 'main');
+  const [isSavingProject, setIsSavingProject] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // GitHub App connections state
+  const [connections, setConnections] = useState<GitHubConnection[]>([]);
+  const [isLoadingConnections, setIsLoadingConnections] = useState(false);
+  const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (activeProject) {
+      setAutoDeployEnabled(activeProject.autoDeploy);
+      setDeploymentBranch(activeProject.deploymentBranch || 'main');
+    }
+  }, [activeProject]);
+
+  const fetchConnections = async () => {
+    setIsLoadingConnections(true);
+    try {
+      const data = await githubApi.getConnections();
+      setConnections(data);
+    } catch {
+      setConnections([]);
+    } finally {
+      setIsLoadingConnections(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchConnections();
+  }, []);
 
   const webhookUrl = `${window.location.protocol}//${window.location.hostname}:8080/api/v1/github/webhook`;
   const webhookSecret = 'whsec_09183491823091820391283';
@@ -51,6 +87,51 @@ export const SettingsPage: React.FC = () => {
     setCopiedSecret(true);
     toast.success('HMAC-SHA256 secret copied to clipboard');
     setTimeout(() => setCopiedSecret(false), 2000);
+  };
+
+  const handleSaveProjectSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeProject) return;
+
+    setIsSavingProject(true);
+    try {
+      await projectsApi.updateProject(activeProject.id, {
+        autoDeploy: autoDeployEnabled,
+        deploymentBranch: deploymentBranch.trim() || 'main',
+      });
+      await refreshProjects();
+      toast.success('Project configuration updated successfully.');
+    } catch {
+      toast.error('Failed to update project settings.');
+    } finally {
+      setIsSavingProject(false);
+    }
+  };
+
+  const handleInstallGitHubApp = async () => {
+    try {
+      const { installUrl } = await githubApi.getInstallUrl();
+      window.open(installUrl, '_blank', 'noopener,noreferrer');
+    } catch {
+      toast.error('Failed to generate GitHub App installation URL.');
+    }
+  };
+
+  const handleDisconnectGitHub = async (id: string, login: string) => {
+    if (!window.confirm(`Are you sure you want to disconnect GitHub account "${login}"? Automated webhooks for its repositories will cease.`)) {
+      return;
+    }
+
+    setDisconnectingId(id);
+    try {
+      await githubApi.disconnectConnection(id);
+      toast.success(`Disconnected GitHub account "${login}".`);
+      await fetchConnections();
+    } catch {
+      toast.error('Failed to disconnect GitHub account.');
+    } finally {
+      setDisconnectingId(null);
+    }
   };
 
   const handleDeleteProject = async () => {
@@ -132,7 +213,177 @@ export const SettingsPage: React.FC = () => {
         )}
       </div>
 
-      {/* GitHub Webhook & Automation Section */}
+      {/* Project Deployment & Branch Configuration Form */}
+      <Card>
+        <CardHeader className="border-b border-[#252D46] pb-4">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-[#8B5CF6]/15 text-[#A78BFA] border border-[#8B5CF6]/30 flex items-center justify-center">
+              <GitBranch className="w-4 h-4" />
+            </div>
+            <div>
+              <CardTitle>Deployment & Branch Policy</CardTitle>
+              <CardDescription>
+                Configure the target deployment branch and automated push triggers.
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+
+        <CardContent className="p-5">
+          <form onSubmit={handleSaveProjectSettings} className="space-y-4 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-slate-300 font-medium mb-1.5">
+                  Deployment Branch
+                </label>
+                <Input
+                  type="text"
+                  value={deploymentBranch}
+                  onChange={(e) => setDeploymentBranch(e.target.value)}
+                  placeholder="main"
+                  mono={true}
+                  required
+                />
+                <p className="text-[11px] text-slate-500 mt-1 font-mono">
+                  Git branch monitored for push events and deployment executions.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-medium mb-1.5">
+                  Allocated Host Port
+                </label>
+                <Input
+                  type="text"
+                  value={activeProject.port ? `localhost:${activeProject.port}` : 'Unassigned (Assigned on first run)'}
+                  disabled={true}
+                  mono={true}
+                />
+                <p className="text-[11px] text-slate-500 mt-1 font-mono">
+                  Collision-free host port managed by Module 7.
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-1">
+              <label className="flex items-start gap-3 p-3.5 rounded-xl bg-[#080B14] border border-[#252D46] cursor-pointer hover:border-slate-600 transition-colors">
+                <input 
+                  type="checkbox" 
+                  checked={autoDeployEnabled}
+                  onChange={(e) => setAutoDeployEnabled(e.target.checked)}
+                  className="w-4 h-4 mt-0.5 rounded accent-[#8B5CF6] cursor-pointer" 
+                />
+                <div className="space-y-0.5">
+                  <div className="font-semibold text-white flex items-center gap-2">
+                    <span>Automatic Push-to-Deploy</span>
+                    <Badge variant={autoDeployEnabled ? 'success' : 'neutral'} size="xs">
+                      {autoDeployEnabled ? 'ENABLED' : 'PAUSED'}
+                    </Badge>
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    Trigger an automated build and container rollout whenever a commit is pushed to branch{' '}
+                    <code className="font-mono bg-[#111629] px-1.5 py-0.5 rounded border border-[#252D46] text-[#A78BFA]">
+                      {deploymentBranch || 'main'}
+                    </code>.
+                  </p>
+                </div>
+              </label>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <Button
+                type="submit"
+                variant="primary"
+                size="sm"
+                isLoading={isSavingProject}
+              >
+                Save Project Changes
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      {/* GitHub App Connections Management */}
+      <Card>
+        <CardHeader className="border-b border-[#252D46] pb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-[#3B82F6]/15 text-[#3B82F6] border border-[#3B82F6]/30 flex items-center justify-center">
+              <FolderGit2 className="w-4 h-4" />
+            </div>
+            <div>
+              <CardTitle>Connected GitHub App Installations</CardTitle>
+              <CardDescription>
+                Authorized accounts and organizations providing repository webhooks.
+              </CardDescription>
+            </div>
+          </div>
+
+          <Button
+            onClick={handleInstallGitHubApp}
+            variant="secondary"
+            size="sm"
+            leftIcon={<Plus className="w-3.5 h-3.5 text-[#3B82F6]" />}
+          >
+            Connect Organization
+          </Button>
+        </CardHeader>
+
+        <CardContent className="p-5 text-xs">
+          {isLoadingConnections ? (
+            <div className="py-6 text-center text-slate-500 font-mono">
+              Loading GitHub installations...
+            </div>
+          ) : connections.length === 0 ? (
+            <div className="p-6 text-center space-y-2 bg-[#080B14] rounded-xl border border-[#252D46]">
+              <p className="text-slate-400">No GitHub App installations connected to your account.</p>
+              <Button
+                onClick={handleInstallGitHubApp}
+                variant="primary"
+                size="sm"
+                leftIcon={<ExternalLink className="w-3.5 h-3.5" />}
+              >
+                Install ShipIt GitHub App
+              </Button>
+            </div>
+          ) : (
+            <div className="divide-y divide-[#252D46]/60">
+              {connections.map((conn) => (
+                <div key={conn.id} className="py-3 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <img 
+                      src={conn.avatarUrl} 
+                      alt={conn.accountLogin} 
+                      className="w-8 h-8 rounded-full border border-[#252D46]" 
+                    />
+                    <div>
+                      <div className="font-semibold text-white flex items-center gap-2">
+                        <span>{conn.accountLogin}</span>
+                        <Badge variant="purple" size="xs">{conn.accountType}</Badge>
+                        {conn.verified && <Badge variant="success" size="xs">Verified</Badge>}
+                      </div>
+                      <p className="text-[11px] text-slate-500 font-mono">
+                        Installation ID: {conn.installationId} • Connected: {new Date(conn.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+
+                  <Button
+                    variant="danger"
+                    size="xs"
+                    isLoading={disconnectingId === conn.id}
+                    onClick={() => handleDisconnectGitHub(conn.id, conn.accountLogin)}
+                  >
+                    Disconnect
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* GitHub Webhook Ingress Section */}
       <Card>
         <CardHeader className="border-b border-[#252D46] pb-4">
           <div className="flex items-center gap-2.5">
@@ -140,7 +391,7 @@ export const SettingsPage: React.FC = () => {
               <ShieldCheck className="w-4 h-4" />
             </div>
             <div>
-              <CardTitle>GitHub Webhook & Auto-Deploy Ingress</CardTitle>
+              <CardTitle>Manual Webhook & Push Ingress</CardTitle>
               <CardDescription>
                 Ingest GitHub push events with cryptographic signature verification (HMAC-SHA256).
               </CardDescription>
@@ -208,97 +459,8 @@ export const SettingsPage: React.FC = () => {
               </Button>
             </div>
             <p className="text-[11px] text-slate-500 mt-1">
-              Used to compute and verify the <code className="font-mono text-slate-400">X-Hub-Signature-256</code> header sent on each GitHub push payload.
+              Used to verify the <code className="font-mono text-slate-400">X-Hub-Signature-256</code> header sent on each GitHub push payload.
             </p>
-          </div>
-
-          {/* Push-to-Deploy Toggle */}
-          <div className="pt-2">
-            <label className="flex items-start gap-3 p-3.5 rounded-xl bg-[#080B14] border border-[#252D46] cursor-pointer hover:border-slate-600 transition-colors">
-              <input 
-                type="checkbox" 
-                checked={autoDeployEnabled}
-                onChange={(e) => {
-                  setAutoDeployEnabled(e.target.checked);
-                  toast.success(`Auto-deploy ${e.target.checked ? 'enabled' : 'disabled'} for branch ${activeProject.deploymentBranch || 'main'}`);
-                }}
-                className="w-4 h-4 mt-0.5 rounded accent-[#8B5CF6] cursor-pointer" 
-              />
-              <div className="space-y-0.5">
-                <div className="font-semibold text-white flex items-center gap-2">
-                  <span>Automatic Push-to-Deploy</span>
-                  <Badge variant={autoDeployEnabled ? 'success' : 'neutral'} size="xs">
-                    {autoDeployEnabled ? 'ENABLED' : 'PAUSED'}
-                  </Badge>
-                </div>
-                <p className="text-[11px] text-slate-400">
-                  Trigger an automated zero-broker build job whenever a push occurs to branch{' '}
-                  <code className="font-mono bg-[#111629] px-1.5 py-0.5 rounded border border-[#252D46] text-[#A78BFA]">
-                    {activeProject.deploymentBranch || 'main'}
-                  </code>
-                </p>
-              </div>
-            </label>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Runtime & Container Defaults Section */}
-      <Card>
-        <CardHeader className="border-b border-[#252D46] pb-4">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-[#3B82F6]/15 text-[#3B82F6] border border-[#3B82F6]/30 flex items-center justify-center">
-              <Boxes className="w-4 h-4" />
-            </div>
-            <div>
-              <CardTitle>Runtime Engine & Port Mapping</CardTitle>
-              <CardDescription>
-                Virtualization engine specifications and port routing configurations.
-              </CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-
-        <CardContent className="p-5 text-xs">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="p-3.5 rounded-xl bg-[#080B14] border border-[#252D46] space-y-1">
-              <span className="text-slate-400 text-[11px] font-medium flex items-center gap-1.5">
-                <Server className="w-3.5 h-3.5 text-[#3B82F6]" />
-                <span>Host Port Mapping</span>
-              </span>
-              <div className="text-white font-mono font-bold text-sm">
-                localhost:{activeProject.port || 10042}
-              </div>
-              <p className="text-[10px] text-slate-500 font-mono">
-                Forwarded to container 8080/TCP
-              </p>
-            </div>
-
-            <div className="p-3.5 rounded-xl bg-[#080B14] border border-[#252D46] space-y-1">
-              <span className="text-slate-400 text-[11px] font-medium flex items-center gap-1.5">
-                <Cpu className="w-3.5 h-3.5 text-[#8B5CF6]" />
-                <span>Memory Allocation Limit</span>
-              </span>
-              <div className="text-white font-mono font-bold text-sm">
-                512 MB Max RAM
-              </div>
-              <p className="text-[10px] text-slate-500 font-mono">
-                Hard cgroup limit with 256 MB JVM Heap
-              </p>
-            </div>
-
-            <div className="p-3.5 rounded-xl bg-[#080B14] border border-[#252D46] space-y-1">
-              <span className="text-slate-400 text-[11px] font-medium flex items-center gap-1.5">
-                <Zap className="w-3.5 h-3.5 text-[#10B981]" />
-                <span>Health Probe Endpoint</span>
-              </span>
-              <div className="text-white font-mono font-bold text-sm">
-                /actuator/health
-              </div>
-              <p className="text-[10px] text-slate-500 font-mono">
-                HTTP GET with 5s timeout probe
-              </p>
-            </div>
           </div>
         </CardContent>
       </Card>
